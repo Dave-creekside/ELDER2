@@ -1,0 +1,30 @@
+# Core dependencies
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+mcp>=1.0.0
+
+# Database dependencies
+neo4j>=5.0.0
+qdrant-client>=1.7.0
+
+# ML dependencies
+sentence-transformers>=2.2.0
+torch>=2.0.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+
+# LangChain dependencies for LLM providers
+langchain>=0.1.0
+langchain-ollama>=0.1.0
+langchain-anthropic>=0.1.0
+langchain-groq>=0.1.0
+langchain-google-genai>=1.0.0
+langchain-openai>=0.1.0
+langchain-community
+requests>=2.25.0
+
+# HTTP client dependencies
+aiohttp>=3.8.0
+
+# Dashboard dependencies
+python-socketio[asyncio]>=5.0.0

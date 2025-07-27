@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elder Consciousness HUD - Radial</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+        }
+        
+        /* Main graph container */
+        #graph {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, #0a0f1b 0%, #000 100%);
+        }
+        
+        /* SVG styles for D3 */
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .node {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .node circle {
+            stroke: rgba(255, 255, 255, 0.3);
+            stroke-width: 2px;
+            transition: all 0.3s ease;
+        }
+        
+        .node text {
+            fill: rgba(255, 255, 255, 0.8);
+            font-size: 11px;
+            text-anchor: middle;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        
+        .node.highlighted circle {
+            stroke: #fff;
+            stroke-width: 3px;
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.8));
+        }
+        
+        .node.dimmed {
+            opacity: 0.2;
+        }
+        
+        .link {
+            fill: none;
+            stroke-opacity: 0.4;
+            pointer-events: none;
+            transition: all 0.3s ease;
+        }
+        
+        .link.highlighted {
+            stroke-opacity: 0.8;
+            stroke-width: 2.5px;
+        }
+        
+        .link.dimmed {
+            stroke-opacity: 0.1;
+        }
+        
+        /* Edge event animations */
+        @keyframes edge-created {
+            0% {
+                stroke-opacity: 0;
+                stroke-width: 5px;
+                filter: drop-shadow(0 0 20px currentColor);
+            }
+            50% {
+                stroke-opacity: 1;
+                stroke-width: 4px;
+                filter: drop-shadow(0 0 10px currentColor);
+            }
+            100% {
+                stroke-opacity: 0.4;
+                stroke-width: 2px;
+                filter: none;
+            }
+        }
+        
+        @keyframes edge-accessed {
+            0%, 100% {
+                stroke-opacity: 0.4;
+                filter: none;
+            }
+            50% {
+                stroke-opacity: 1;
+                filter: drop-shadow(0 0 15px currentColor);
+            }
+        }
+        
+        @keyframes edge-strengthened {
+            0% {
+                stroke-width: 2px;
+            }
+            50% {
+                stroke-width: 5px;
+                stroke-opacity: 0.9;
+                filter: drop-shadow(0 0 10px currentColor);
+            }
+            100% {
+                stroke-width: 3px;
+                stroke-opacity: 0.6;
+                filter: none;
+            }
+        }
+        
+        @keyframes edge-weakened {
+            0% {
+                stroke-opacity: 0.6;
+            }
+            50% {
+                stroke-opacity: 0.1;
+                stroke-dasharray: 5, 5;
+            }
+            100% {
+                stroke-opacity: 0.3;
+                stroke-dasharray: none;
+            }
+        }
+        
+        @keyframes edge-pruned {
+            0% {
+                stroke-opacity: 0.4;
+            }
+            100% {
+                stroke-opacity: 0;
+                stroke-width: 0;
+            }
+        }
+        
+        .link.animating-created {
+            animation: edge-created 2s ease-out;
+        }
+        
+        .link.animating-accessed {
+            animation: edge-accessed 1s ease-in-out;
+        }
+        
+        .link.animating-strengthened {
+            animation: edge-strengthened 1.5s ease-out;
+        }
+        
+        .link.animating-weakened {
+            animation: edge-weakened 1.5s ease-out;
+        }
+        
+        .link.animating-pruned {
+            animation: edge-pruned 1s ease-out forwards;
+        }
+        
+        .hyperedge {
+            fill: none;
+            stroke-opacity: 0.3;
+            stroke-width: 2px;
+            transition: all 0.3s ease;
+        }
+        
+        .hyperedge.highlighted {
+            stroke-opacity: 0.6;
+            stroke-width: 3px;
+        }
+        
+        .hyperedge.dimmed {
+            stroke-opacity: 0.05;
+        }
+        
+        /* Corner status indicators */
+        .corner {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .bottom-right {
+            bottom: 80px;
+            right: 20px;
+        }
+        
+        /* Single status indicator with modes */
+        .status-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        /* Microphone mode (red) */
+        .status-icon.mic-mode {
+            border-color: #ff0040;
+            background: rgba(255, 0, 64, 0.2);
+            box-shadow: 0 0 20px rgba(255, 0, 64, 0.5);
+        }
+        
+        .status-icon.mic-mode::before {
+            content: "🎤";
+            font-size: 24px;
+        }
+        
+        /* Speaker mode (green) */
+        .status-icon.speaker-mode {
+            border-color: #00ff40;
+            background: rgba(0, 255, 64, 0.2);
+            box-shadow: 0 0 20px rgba(0, 255, 64, 0.5);
+        }
+        
+        .status-icon.speaker-mode::before {
+            content: "🔊";
+            font-size: 24px;
+        }
+        
+        /* Progress mode (blue) */
+        .status-icon.progress-mode {
+            border-color: #0080ff;
+            background: rgba(0, 128, 255, 0.2);
+            box-shadow: 0 0 20px rgba(0, 128, 255, 0.5);
+        }
+        
+        /* Progress bar */
+        .progress-ring {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 3px solid rgba(0, 128, 255, 0.2);
+            border-top-color: #0080ff;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* MCP Server bar */
+        .mcp-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 30px;
+            z-index: 1000;
+        }
+        
+        .mcp-server {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .mcp-server.connected {
+            background: rgba(0, 255, 136, 0.1);
+            border-color: rgba(0, 255, 136, 0.3);
+        }
+        
+        .mcp-server.active {
+            background: rgba(0, 255, 136, 0.2);
+            border-color: #00ff88;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+        }
+        
+        .mcp-server .icon {
+            font-size: 24px;
+        }
+        
+        /* Node info tooltip */
+        .tooltip {
+            position: absolute;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1001;
+        }
+        
+        .tooltip.visible {
+            opacity: 1;
+        }
+        
+        /* Subtle vignette */
+        .vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.4) 100%);
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+    <!-- Main graph visualization -->
+    <div id="graph"></div>
+    
+    <!-- Vignette overlay -->
+    <div class="vignette"></div>
+    
+    <!-- Tooltip -->
+    <div class="tooltip" id="tooltip"></div>
+    
+    <!-- Single status indicator -->
+    <div class="corner bottom-right">
+        <div class="status-icon" id="status">
+            <!-- Content will be dynamically switched -->
+        </div>
+    </div>
+    
+    <!-- MCP Server status bar -->
+    <div class="mcp-bar" id="mcp-bar">
+        <div class="mcp-server" data-server="neo4j">
+            <span class="icon">🧠</span>
+        </div>
+        <div class="mcp-server" data-server="qdrant">
+            <span class="icon">💾</span>
+        </div>
+        <div class="mcp-server" data-server="gmail">
+            <span class="icon">📧</span>
+        </div>
+        <div class="mcp-server" data-server="drive">
+            <span class="icon">📁</span>
+        </div>
+        <div class="mcp-server" data-server="calendar">
+            <span class="icon">📅</span>
+        </div>
+        <div class="mcp-server" data-server="transformers">
+            <span class="icon">🤖</span>
+        </div>
+    </div>
+
+    <script>
+        // Radial Layout Setup
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        
+        // Create SVG
+        const svg = d3.select("#graph")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+        
+        // Create container group for zoom/pan
+        const g = svg.append("g");
+        
+        // Add zoom behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.5, 2])
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+        
+        svg.call(zoom);
+        
+        // Create groups for rendering order
+        const linkGroup = g.append("g").attr("class", "links");
+        const hyperedgeGroup = g.append("g").attr("class", "hyperedges");
+        const nodeGroup = g.append("g").attr("class", "nodes");
+        
+        // Data structures
+        let nodes = [];
+        let links = [];
+        let hyperedges = [];
+        let nodeById = new Map();
+        
+        // Color palette for nodes
+        const nodeColors = [
+            '#00ff88', '#00aaff', '#ff0088', '#ffaa00', '#aa00ff',
+            '#00ffaa', '#ff00aa', '#aaff00', '#00aaff', '#ff5500'
+        ];
+        
+        // Core nodes that should be in center
+        const coreNodes = ['tools', 'long_term_memory', 'working_memory'];
+        
+        function getNodeColor(nodeId) {
+            let hash = 0;
+            for (let i = 0; i < nodeId.length; i++) {
+                hash = nodeId.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return nodeColors[Math.abs(hash) % nodeColors.length];
+        }
+        
+        // Calculate distance from core nodes
+        function calculateDistanceFromCore(nodeId) {
+            if (coreNodes.includes(nodeId)) return 0;
+            
+            const distances = new Map();
+            const queue = [...coreNodes];
+            coreNodes.forEach(core => distances.set(core, 0));
+            
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const currentDist = distances.get(current);
+                
+                links.forEach(link => {
+                    const source = typeof link.source === 'string' ? link.source : link.source.id;
+                    const target = typeof link.target === 'string' ? link.target : link.target.id;
+                    
+                    let neighbor = null;
+                    if (source === current) neighbor = target;
+                    else if (target === current) neighbor = source;
+                    
+                    if (neighbor && !distances.has(neighbor)) {
+                        distances.set(neighbor, currentDist + 1);
+                        queue.push(neighbor);
+                    }
+                });
+            }
+            
+            return distances.get(nodeId) || 999;
+        }
+        
+        // Position nodes in radial layout
+        function positionNodes() {
+            console.log('Positioning nodes...');
+            
+            // First, ensure core nodes exist
+            const existingCoreNodes = nodes.filter(n => coreNodes.includes(n.id));
+            console.log(`Core nodes found: ${existingCoreNodes.length}`);
+            
+            // Group nodes by distance from core
+            const nodesByDistance = new Map();
+            
+            nodes.forEach(node => {
+                const distance = calculateDistanceFromCore(node.id);
+                node.distance = distance;
+                
+                // Cap distance for unconnected nodes
+                const effectiveDistance = distance === 999 ? 3 : distance;
+                
+                if (!nodesByDistance.has(effectiveDistance)) {
+                    nodesByDistance.set(effectiveDistance, []);
+                }
+                nodesByDistance.get(effectiveDistance).push(node);
+            });
+            
+            console.log('Nodes by distance:', Array.from(nodesByDistance.entries()).map(([d, nodes]) => `${d}: ${nodes.length} nodes`));
+            
+            // Position each ring
+            nodesByDistance.forEach((nodesInRing, distance) => {
+                if (distance === 0) {
+                    // Core nodes in center triangle
+                    nodesInRing.forEach((node, i) => {
+                        const angle = (i * 2 * Math.PI / 3) - Math.PI / 2;
+                        node.x = centerX + Math.cos(angle) * 30;
+                        node.y = centerY + Math.sin(angle) * 30;
+                        node.fixed = true;
+                    });
+                } else {
+                    // Other nodes in rings
+                    const radius = 100 + Math.min(distance, 4) * 80;
+                    const angleStep = (2 * Math.PI) / nodesInRing.length;
+                    
+                    nodesInRing.forEach((node, i) => {
+                        const angle = i * angleStep - Math.PI / 2;
+                        node.x = centerX + Math.cos(angle) * radius;
+                        node.y = centerY + Math.sin(angle) * radius;
+                        node.fixed = true;
+                    });
+                }
+            });
+            
+            // Verify all nodes have positions
+            const nodesWithoutPosition = nodes.filter(n => !n.x || !n.y);
+            if (nodesWithoutPosition.length > 0) {
+                console.error('Nodes without positions:', nodesWithoutPosition);
+            }
+        }
+        
+        // Create curved path for links
+        function linkPath(d) {
+            // Look up actual nodes by ID
+            const sourceId = typeof d.source === 'string' ? d.source : d.source.id;
+            const targetId = typeof d.target === 'string' ? d.target : d.target.id;
+            
+            const sourceNode = nodeById.get(sourceId);
+            const targetNode = nodeById.get(targetId);
+            
+            if (!sourceNode || !targetNode) return null;
+            
+            const dx = targetNode.x - sourceNode.x;
+            const dy = targetNode.y - sourceNode.y;
+            const dr = Math.sqrt(dx * dx + dy * dy) * 0.3;
+            
+            return `M${sourceNode.x},${sourceNode.y}A${dr},${dr} 0 0,1 ${targetNode.x},${targetNode.y}`;
+        }
+        
+        // Create arc path for hyperedges
+        function hyperedgePath(d) {
+            const members = d.members.map(id => nodeById.get(id)).filter(n => n);
+            if (members.length < 2) return null;
+            
+            // Find center of hyperedge
+            const centerX = d3.mean(members, n => n.x);
+            const centerY = d3.mean(members, n => n.y);
+            
+            // Sort members by angle from center
+            members.sort((a, b) => {
+                const angleA = Math.atan2(a.y - centerY, a.x - centerX);
+                const angleB = Math.atan2(b.y - centerY, b.x - centerX);
+                return angleA - angleB;
+            });
+            
+            // Create smooth curve through members
+            const curve = d3.line()
+                .x(d => d.x)
+                .y(d => d.y)
+                .curve(d3.curveCatmullRomClosed);
+            
+            return curve(members);
+        }
+        
+        // Update graph
+        function updateGraph() {
+            // Build node lookup
+            nodeById.clear();
+            nodes.forEach(n => nodeById.set(n.id, n));
+            
+            // Position nodes in radial layout
+            positionNodes();
+            
+            // Update links
+            const link = linkGroup.selectAll(".link")
+                .data(links, d => d.id);
+            
+            link.exit().remove();
+            
+            const linkEnter = link.enter()
+                .append("path")
+                .attr("class", "link")
+                .attr("stroke", d => d.color || "#666")
+                .attr("stroke-width", d => Math.sqrt(d.strength * 3));
+            
+            link.merge(linkEnter)
+                .attr("d", linkPath);
+            
+            // Update nodes
+            const node = nodeGroup.selectAll(".node")
+                .data(nodes, d => d.id);
+            
+            node.exit().remove();
+            
+            const nodeEnter = node.enter()
+                .append("g")
+                .attr("class", "node");
+            
+            nodeEnter.append("circle")
+                .attr("r", d => d.importance * 3 + 8)
+                .attr("fill", d => d.color);
+            
+            nodeEnter.append("text")
+                .text(d => d.label || d.id)
+                .attr("y", 4);
+            
+            const allNodes = node.merge(nodeEnter);
+            
+            allNodes
+                .attr("transform", d => `translate(${d.x},${d.y})`)
+                .on("mouseenter", handleNodeHover)
+                .on("mouseleave", handleNodeLeave)
+                .on("click", handleNodeClick);
+            
+            // Update hyperedges
+            const hyperedge = hyperedgeGroup.selectAll(".hyperedge")
+                .data(hyperedges, d => d.id);
+            
+            hyperedge.exit().remove();
+            
+            const hyperedgeEnter = hyperedge.enter()
+                .append("path")
+                .attr("class", "hyperedge")
+                .attr("stroke", d => getNodeColor(d.label || d.id))
+                .attr("fill-opacity", 0);
+            
+            hyperedge.merge(hyperedgeEnter)
+                .attr("d", hyperedgePath);
+        }
+        
+        // Interaction handlers
+        let selectedNode = null;
+        const tooltip = document.getElementById('tooltip');
+        
+        function handleNodeHover(event, d) {
+            if (selectedNode) return;
+            
+            // Highlight node and connections
+            highlightConnections(d.id);
+            
+            // Show tooltip
+            tooltip.innerHTML = `<strong>${d.label || d.id}</strong><br>Importance: ${d.importance.toFixed(2)}`;
+            tooltip.classList.add('visible');
+            tooltip.style.left = (event.pageX + 10) + 'px';
+            tooltip.style.top = (event.pageY - 30) + 'px';
+        }
+        
+        function handleNodeLeave() {
+            if (selectedNode) return;
+            
+            clearHighlights();
+            tooltip.classList.remove('visible');
+        }
+        
+        function handleNodeClick(event, d) {
+            event.stopPropagation();
+            
+            if (selectedNode === d.id) {
+                selectedNode = null;
+                clearHighlights();
+            } else {
+                selectedNode = d.id;
+                highlightConnections(d.id);
+            }
+        }
+        
+        function highlightConnections(nodeId) {
+            // Dim all elements first
+            nodeGroup.selectAll(".node").classed("dimmed", true);
+            linkGroup.selectAll(".link").classed("dimmed", true);
+            hyperedgeGroup.selectAll(".hyperedge").classed("dimmed", true);
+            
+            // Highlight selected node
+            nodeGroup.selectAll(".node")
+                .filter(d => d.id === nodeId)
+                .classed("dimmed", false)
+                .classed("highlighted", true);
+            
+            // Highlight connected nodes and links
+            const connectedNodes = new Set([nodeId]);
+            
+            links.forEach(link => {
+                const source = typeof link.source === 'string' ? link.source : link.source.id;
+                const target = typeof link.target === 'string' ? link.target : link.target.id;
+                
+                if (source === nodeId || target === nodeId) {
+                    connectedNodes.add(source);
+                    connectedNodes.add(target);
+                    
+                    linkGroup.selectAll(".link")
+                        .filter(d => d === link)
+                        .classed("dimmed", false)
+                        .classed("highlighted", true);
+                }
+            });
+            
+            // Highlight connected nodes
+            nodeGroup.selectAll(".node")
+                .filter(d => connectedNodes.has(d.id))
+                .classed("dimmed", false);
+            
+            // Highlight hyperedges containing the node
+            hyperedgeGroup.selectAll(".hyperedge")
+                .filter(d => d.members.includes(nodeId))
+                .classed("dimmed", false)
+                .classed("highlighted", true);
+        }
+        
+        function clearHighlights() {
+            nodeGroup.selectAll(".node")
+                .classed("dimmed", false)
+                .classed("highlighted", false);
+            linkGroup.selectAll(".link")
+                .classed("dimmed", false)
+                .classed("highlighted", false);
+            hyperedgeGroup.selectAll(".hyperedge")
+                .classed("dimmed", false)
+                .classed("highlighted", false);
+        }
+        
+        // Click background to clear selection
+        svg.on("click", () => {
+            selectedNode = null;
+            clearHighlights();
+        });
+        
+        // WebSocket connection
+        const socket = io('http://localhost:5000');
+        
+        // Status management
+        const statusIndicator = document.getElementById('status');
+        let currentMode = 'idle';
+        
+        function setStatusMode(mode) {
+            statusIndicator.className = 'status-icon';
+            statusIndicator.innerHTML = '';
+            currentMode = mode;
+            
+            switch(mode) {
+                case 'mic':
+                    statusIndicator.classList.add('mic-mode');
+                    break;
+                case 'speaker':
+                    statusIndicator.classList.add('speaker-mode');
+                    break;
+                case 'progress':
+                    statusIndicator.classList.add('progress-mode');
+                    statusIndicator.innerHTML = '<div class="progress-ring"></div>';
+                    break;
+                default:
+                    // Idle state - no special styling
+                    break;
+            }
+        }
+        
+        // Socket event handlers
+        socket.on('connect', () => {
+            console.log('Connected to Elder Consciousness');
+        });
+        
+        socket.on('graph_update', (data) => {
+            console.log('Graph update received:', data);
+            
+            // Update nodes
+            if (data.nodes) {
+                data.nodes.forEach(newNode => {
+                    const existing = nodes.find(n => n.id === newNode.id);
+                    if (!existing) {
+                        nodes.push({
+                            ...newNode,
+                            color: getNodeColor(newNode.id)
+                        });
+                    } else {
+                        Object.assign(existing, newNode);
+                    }
+                });
+                console.log(`Total nodes: ${nodes.length}`);
+            }
+            
+            // Update edges
+            if (data.edges) {
+                // Clear existing links if we're getting a full update
+                if (data.edges.length > 0) {
+                    links = [];
+                }
+                
+                data.edges.forEach(newEdge => {
+                    // Make sure we have valid source and target
+                    if (newEdge.source && newEdge.target) {
+                        links.push({
+                            ...newEdge,
+                            id: newEdge.id || `${newEdge.source}-${newEdge.target}`,
+                            color: getNodeColor(newEdge.source)
+                        });
+                    }
+                });
+                console.log(`Total edges: ${links.length}`);
+            }
+            
+            // Update hyperedges
+            if (data.hyperedges) {
+                hyperedges = data.hyperedges;
+                console.log(`Received ${hyperedges.length} hyperedges`);
+            }
+            
+            // Only update if we have nodes
+            if (nodes.length > 0) {
+                updateGraph();
+            } else {
+                console.warn('No nodes to display');
+            }
+        });
+        
+        socket.on('thinking_status', (status) => {
+            if (status.active) {
+                setStatusMode('progress');
+            } else if (currentMode === 'progress') {
+                setStatusMode('idle');
+            }
+        });
+        
+        socket.on('mic_status', (status) => {
+            if (status.active) {
+                setStatusMode('mic');
+            } else if (currentMode === 'mic') {
+                setStatusMode('idle');
+            }
+        });
+        
+        socket.on('speaker_status', (status) => {
+            if (status.active) {
+                setStatusMode('speaker');
+            } else if (currentMode === 'speaker') {
+                setStatusMode('idle');
+            }
+        });
+        
+        socket.on('mcp_activity', (data) => {
+            const serverEl = document.querySelector(`[data-server="${data.server}"]`);
+            if (serverEl) {
+                if (data.status === 'connected') {
+                    serverEl.classList.add('connected');
+                } else if (data.status === 'active') {
+                    serverEl.classList.add('active');
+                    setTimeout(() => {
+                        serverEl.classList.remove('active');
+                    }, 500);
+                } else if (data.status === 'disconnected') {
+                    serverEl.classList.remove('connected', 'active');
+                }
+            }
+        });
+        
+        // Handle edge events for real-time animations
+        socket.on('edge_event', (data) => {
+            console.log('Edge event:', data);
+            
+            const edgeId = `${data.source}-${data.target}`;
+            const altEdgeId = `${data.target}-${data.source}`;
+            
+            // Find the edge element
+            const edge = linkGroup.selectAll(".link")
+                .filter(d => d.id === edgeId || d.id === altEdgeId);
+            
+            if (edge.empty()) {
+                console.warn(`Edge not found: ${edgeId}`);
+                
+                // For 'created' events, add the new edge
+                if (data.type === 'created') {
+                    const newEdge = {
+                        id: edgeId,
+                        source: data.source,
+                        target: data.target,
+                        strength: data.weight || 0.5,
+                        color: getNodeColor(data.source)
+                    };
+                    links.push(newEdge);
+                    updateGraph();
+                    
+                    // After graph update, find and animate the new edge
+                    setTimeout(() => {
+                        const createdEdge = linkGroup.selectAll(".link")
+                            .filter(d => d.id === edgeId || d.id === altEdgeId);
+                        animateEdge(createdEdge, data.type);
+                    }, 100);
+                }
+                return;
+            }
+            
+            // Apply animation based on event type
+            animateEdge(edge, data.type);
+            
+            // Update edge properties if needed
+            if (data.type === 'strengthened' || data.type === 'weakened') {
+                edge.data().forEach(d => {
+                    if (data.weight !== undefined) {
+                        d.strength = data.weight;
+                    }
+                });
+                
+                // Update stroke width after animation
+                setTimeout(() => {
+                    edge.attr("stroke-width", d => Math.sqrt(d.strength * 3));
+                }, 1500);
+            }
+            
+            // Remove edge if pruned
+            if (data.type === 'pruned') {
+                setTimeout(() => {
+                    links = links.filter(l => l.id !== edgeId && l.id !== altEdgeId);
+                    updateGraph();
+                }, 1000); // Wait for animation to complete
+            }
+        });
+        
+        // Helper function to apply edge animations
+        function animateEdge(edgeSelection, eventType) {
+            // Remove any existing animation classes
+            edgeSelection.classed("animating-created", false);
+            edgeSelection.classed("animating-accessed", false);
+            edgeSelection.classed("animating-strengthened", false);
+            edgeSelection.classed("animating-weakened", false);
+            edgeSelection.classed("animating-pruned", false);
+            
+            // Force reflow to restart animation
+            edgeSelection.node()?.offsetHeight;
+            
+            // Apply new animation
+            switch(eventType) {
+                case 'created':
+                    edgeSelection.classed("animating-created", true);
+                    break;
+                case 'accessed':
+                    edgeSelection.classed("animating-accessed", true);
+                    break;
+                case 'strengthened':
+                    edgeSelection.classed("animating-strengthened", true);
+                    break;
+                case 'weakened':
+                    edgeSelection.classed("animating-weakened", true);
+                    break;
+                case 'pruned':
+                    edgeSelection.classed("animating-pruned", true);
+                    break;
+            }
+            
+            // Remove animation class after completion
+            const animationDuration = {
+                'created': 2000,
+                'accessed': 1000,
+                'strengthened': 1500,
+                'weakened': 1500,
+                'pruned': 1000
+            }[eventType] || 1000;
+            
+            setTimeout(() => {
+                edgeSelection.classed(`animating-${eventType}`, false);
+            }, animationDuration);
+        }
+        
+        // Initial data request
+        setTimeout(() => {
+            socket.emit('request_full_graph');
+            socket.emit('request_mcp_status');
+        }, 1000);
+    </script>
+</body>
+</html>
