@@ -356,6 +356,81 @@ Remember: This is YOUR dream state. Create freely, explore boldly, connect every
         
         return dream_executor
     
+    def _sanitize_model_response(self, response: str) -> str:
+        """
+        Sanitize model response to handle reasoning model quirks and hidden tokens
+        Similar to dream parsing - simple and flexible
+        """
+        import re
+        
+        if not response:
+            return response
+            
+        sanitized = response
+        
+        # Remove common hidden tokens that might truncate display
+        hidden_tokens = [
+            '\x00',  # Null byte
+            '<|endoftext|>',
+            '<|end|>',
+            '<|im_end|>',
+            '<|eot_id|>',
+            '<|im_start|>',
+            '<|assistant|>',
+            '<|user|>',
+            '<|system|>',
+            '<|endofthought|>',
+            '<|endoftext|>',
+            '<|/assistant|>',
+            '<|/user|>',
+            '<|/system|>'
+        ]
+        
+        for token in hidden_tokens:
+            sanitized = sanitized.replace(token, '')
+        
+        # Handle various thinking/reasoning tag formats flexibly
+        # Different models use different tags: <thinking>, <think>, <reasoning>, etc.
+        thinking_tags = [
+            (r'<think>(.*?)</think>', 'think'),
+            (r'<thinking>(.*?)</thinking>', 'thinking'),
+            (r'<reasoning>(.*?)</reasoning>', 'reasoning'),
+            (r'<thought>(.*?)</thought>', 'thought'),
+            (r'<reflect>(.*?)</reflect>', 'reflect'),
+            (r'<plan>(.*?)</plan>', 'plan'),
+            # Add more patterns as needed for different models
+        ]
+        
+        # Check if response contains ONLY thinking tags (no actual response)
+        has_thinking = False
+        thinking_content = ""
+        
+        for pattern, tag_name in thinking_tags:
+            matches = re.findall(pattern, sanitized, re.DOTALL | re.IGNORECASE)
+            if matches:
+                has_thinking = True
+                # Log first match for debugging
+                logger.debug(f"🧠 Found {tag_name} segment ({len(matches[0])} chars)")
+                thinking_content = matches[0][:500] + "..." if len(matches[0]) > 500 else matches[0]
+                
+                # Remove this thinking pattern from response
+                sanitized = re.sub(pattern, '', sanitized, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Clean up the response
+        sanitized = sanitized.strip()
+        
+        # If after removing thinking tags there's nothing left, log it
+        if has_thinking and not sanitized:
+            logger.warning(f"⚠️ Response contained ONLY thinking/reasoning - possible truncation issue")
+            logger.info(f"🧠 Thinking content: {thinking_content}")
+            # Return a message indicating what happened
+            return f"[Model produced only internal reasoning without a response. This may indicate a truncation issue with the reasoning model.]"
+        
+        # Remove excessive newlines (more than 2 in a row)
+        sanitized = re.sub(r'\n{3,}', '\n\n', sanitized)
+        
+        return sanitized
+    
     async def chat(self, user_input: str) -> str:
         """
         Main chat interface with intelligent tool selection
@@ -407,6 +482,10 @@ Remember: This is YOUR dream state. Create freely, explore boldly, connect every
                             ai_response = parsed[0]["text"]
                 except:
                     pass  # Keep original if parsing fails
+            
+            # Update conversation history
+            # Sanitize the response to handle reasoning model quirks
+            ai_response = self._sanitize_model_response(ai_response)
             
             # Update conversation history
             self.conversation_history.append({"role": "user", "content": user_input})

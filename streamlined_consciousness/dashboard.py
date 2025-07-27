@@ -413,7 +413,7 @@ class ConsciousnessDashboard:
         
         self.consciousness.chat = wrapped_chat
         
-        # Hook into Neo4j relationship creation tools
+        # Hook into Neo4j relationship creation and deletion tools
         self._hook_into_neo4j_tools()
         
         # Hook into dream sessions
@@ -465,9 +465,10 @@ class ConsciousnessDashboard:
     def _hook_into_neo4j_tools(self):
         """Hook into Neo4j tools to emit edge events"""
         try:
-            # Find neo4j relationship creation tool
+            # Find neo4j tools to hook
             for category in self.consciousness.tool_categories.values():
                 for tool in category.tools:
+                    # Hook into relationship creation
                     if 'create_relationship' in tool.name:
                         original_run = tool._run
                         
@@ -502,6 +503,40 @@ class ConsciousnessDashboard:
                         
                         tool._run = wrapped_run
                         logger.info(f"Hooked into Neo4j tool: {tool.name}")
+                    
+                    # Hook into node deletion
+                    elif 'delete_concept_node' in tool.name:
+                        original_run = tool._run
+                        
+                        def wrapped_delete_run(*args, **kwargs):
+                            result = original_run(*args, **kwargs)
+                            
+                            # Parse the result to check if deletion was successful
+                            try:
+                                if isinstance(result, str):
+                                    result_data = json.loads(result)
+                                else:
+                                    result_data = result
+                                    
+                                if result_data.get('success'):
+                                    # Emit trace that node was deleted
+                                    node_name = kwargs.get('name', 'unknown')
+                                    asyncio.create_task(self.emit_trace({
+                                        'type': 'node_deleted',
+                                        'timestamp': datetime.now().strftime('%H:%M:%S'),
+                                        'message': f'Deleted concept node: {node_name}'
+                                    }))
+                                    
+                                    # Send full graph update after deletion
+                                    asyncio.create_task(self.send_full_graph())
+                                    
+                            except Exception as e:
+                                logger.warning(f"Failed to emit deletion event: {e}")
+                            
+                            return result
+                        
+                        tool._run = wrapped_delete_run
+                        logger.info(f"Hooked into Neo4j deletion tool: {tool.name}")
                         
         except Exception as e:
             logger.warning(f"Failed to hook into Neo4j tools: {e}")

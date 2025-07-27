@@ -1115,6 +1115,10 @@ class Neo4jSemanticHypergraphServer:
                                 relationship_type: str, properties: Dict[str, Any],
                                 auto_calculate_weight: bool = True) -> Dict[str, Any]:
         """Create a weighted relationship between concepts"""
+        # Validate relationship_type
+        if not relationship_type or not relationship_type.strip():
+            relationship_type = "RELATED"  # Default relationship type
+            logger.warning(f"Empty relationship_type provided, using default: {relationship_type}")
         if auto_calculate_weight:
             weight = await self.get_semantic_similarity(from_concept, to_concept)
             properties["weight"] = weight
@@ -1127,6 +1131,25 @@ class Neo4jSemanticHypergraphServer:
             properties["semantic_weight"] = weight
         
         async with self.driver.session() as session:
+            # First check if both nodes exist
+            check_query = """
+            MATCH (a:Concept {name: $from_concept})
+            MATCH (b:Concept {name: $to_concept})
+            RETURN a, b
+            """
+            check_result = await session.run(check_query, 
+                                           from_concept=from_concept, 
+                                           to_concept=to_concept)
+            check_record = await check_result.single()
+            
+            if not check_record:
+                # One or both nodes don't exist
+                return serialize_for_json({
+                    "success": False,
+                    "message": f"Cannot create relationship: one or both concepts do not exist ('{from_concept}', '{to_concept}')"
+                })
+            
+            # Now create the relationship
             query = f"""
             MATCH (a:Concept {{name: $from_concept}})
             MATCH (b:Concept {{name: $to_concept}})
@@ -1140,6 +1163,12 @@ class Neo4jSemanticHypergraphServer:
                                      to_concept=to_concept, 
                                      properties=properties)
             record = await result.single()
+
+            if not record:
+                return serialize_for_json({
+                    "success": False,
+                    "message": f"Failed to create relationship between '{from_concept}' and '{to_concept}'"
+                })
 
             return serialize_for_json({
                 "success": True, 
