@@ -337,6 +337,18 @@ class Neo4jSemanticHypergraphServer:
                     }
                 ),
                 Tool(
+                    name="delete_concept_node",
+                    description="Delete a concept node from the hypergraph",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Name of the concept to delete"},
+                            "cascade": {"type": "boolean", "description": "Whether to also delete connected relationships", "default": True}
+                        },
+                        "required": ["name"]
+                    }
+                ),
+                Tool(
                     name="create_hyperedge",
                     description="Create a semantic hyperedge connecting multiple concepts with automatic weight calculation",
                     inputSchema={
@@ -753,6 +765,11 @@ class Neo4jSemanticHypergraphServer:
                         arguments["name"], 
                         arguments.get("properties", {})
                     )
+                elif name == "delete_concept_node":
+                    result = await self.delete_concept_node(
+                        arguments["name"],
+                        arguments.get("cascade", True)
+                    )
                 elif name == "create_hyperedge":
                     result = await self.create_hyperedge(
                         arguments["members"],
@@ -950,6 +967,65 @@ class Neo4jSemanticHypergraphServer:
             result = await session.run(query, name=name, properties=properties)
             record = await result.single()
             return serialize_for_json({"success": True, "node": dict(record["c"])})
+    
+    async def delete_concept_node(self, name: str, cascade: bool = True) -> Dict[str, Any]:
+        """Delete a concept node from the hypergraph"""
+        async with self.driver.session() as session:
+            # First check if the node exists
+            check_query = """
+            MATCH (c:Concept {name: $name})
+            RETURN c
+            """
+            result = await session.run(check_query, name=name)
+            node = await result.single()
+            
+            if not node:
+                return serialize_for_json({
+                    "success": False,
+                    "message": f"Concept node '{name}' not found"
+                })
+            
+            if cascade:
+                # Delete the node and all its relationships
+                delete_query = """
+                MATCH (c:Concept {name: $name})
+                DETACH DELETE c
+                """
+                await session.run(delete_query, name=name)
+                
+                return serialize_for_json({
+                    "success": True,
+                    "message": f"Concept node '{name}' and all its relationships deleted",
+                    "cascade": True
+                })
+            else:
+                # Check if node has relationships
+                rel_check_query = """
+                MATCH (c:Concept {name: $name})-[r]-()
+                RETURN count(r) as rel_count
+                """
+                result = await session.run(rel_check_query, name=name)
+                rel_record = await result.single()
+                
+                if rel_record["rel_count"] > 0:
+                    return serialize_for_json({
+                        "success": False,
+                        "message": f"Cannot delete concept '{name}' without cascade - it has {rel_record['rel_count']} relationships",
+                        "relationship_count": rel_record["rel_count"]
+                    })
+                
+                # Delete only the node (no relationships)
+                delete_query = """
+                MATCH (c:Concept {name: $name})
+                DELETE c
+                """
+                await session.run(delete_query, name=name)
+                
+                return serialize_for_json({
+                    "success": True,
+                    "message": f"Concept node '{name}' deleted",
+                    "cascade": False
+                })
     
     async def create_hyperedge(self, members: List[str], label: Optional[str] = None, 
                              auto_calculate_weights: bool = True) -> Dict[str, Any]:
