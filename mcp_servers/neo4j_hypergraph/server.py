@@ -1662,21 +1662,13 @@ class Neo4jSemanticHypergraphServer:
             """
             await session.run(create_nodes_query, vocabulary=vocabulary, project_id=project_id)
             
-            # Add core memory nodes
-            memory_nodes = ["long_term_memory", "working_memory", "short_term_memory", "tools"]
-            memory_query = """
-            UNWIND $memory_nodes as node_name
-            MERGE (m:Concept:Memory {name: node_name, project_id: $project_id})
-            SET m.created_at = datetime()
-            SET m.is_core = true
-            """
-            await session.run(memory_query, memory_nodes=memory_nodes, project_id=project_id)
+            # Note: Core memory nodes should be created via create_blank_project, not here
             
             return serialize_for_json({
                 "success": True, 
                 "vocabulary_count": len(vocabulary),
-                "memory_nodes_count": len(memory_nodes),
-                "project_id": project_id
+                "project_id": project_id,
+                "message": f"Added {len(vocabulary)} vocabulary concepts to project '{project_id}'"
             })
     
     async def create_project(self, project_id: str, name: str, description: str = "", template: str = "blank") -> Dict[str, Any]:
@@ -2216,18 +2208,131 @@ class Neo4jSemanticHypergraphServer:
                              name=name, 
                              description=description)
             
-            # Create only the 3 core memory nodes
-            core_nodes = ["tools", "long_term_memory", "working_memory"]
-            core_query = """
-            UNWIND $core_nodes as node_name
-            CREATE (c:Concept:CoreMemory {
-                name: node_name, 
-                project_id: $project_id,
-                created_at: datetime(),
-                is_core: true
-            })
-            """
-            await session.run(core_query, core_nodes=core_nodes, project_id=project_id)
+            # Create the four primary nodes exactly as in nuke_neo4j.sh
+            # Create Self node
+            await session.run("""
+                CREATE (self:Concept:CoreMemory:Immutable {
+                    name: 'Self', 
+                    description: 'Represents the core concept of self-identity and awareness.',
+                    project_id: $project_id,
+                    created_at: datetime(),
+                    is_core: true
+                })
+            """, project_id=project_id)
+            
+            # Create Working Memory node
+            await session.run("""
+                CREATE (wm:Concept:CoreMemory:Immutable {
+                    name: 'Working Memory',
+                    description: 'Represents the active, conscious state of working memory.',
+                    project_id: $project_id,
+                    created_at: datetime(),
+                    is_core: true
+                })
+            """, project_id=project_id)
+            
+            # Create Long Term Memory node
+            await session.run("""
+                CREATE (ltm:Concept:CoreMemory:Immutable {
+                    name: 'Long Term Memory',
+                    description: 'Represents the vast, unconscious store of long-term memories.',
+                    project_id: $project_id,
+                    created_at: datetime(),
+                    is_core: true
+                })
+            """, project_id=project_id)
+            
+            # Create Tools node
+            await session.run("""
+                CREATE (tools:Concept:CoreMemory:Immutable {
+                    name: 'Tools',
+                    description: 'Represents the available tools and capabilities for interacting with the world.',
+                    project_id: $project_id,
+                    created_at: datetime(),
+                    is_core: true
+                })
+            """, project_id=project_id)
+            
+            # Create SEMANTIC relationships between all primary nodes (exactly as in nuke_neo4j.sh)
+            # Working Memory <-> Long Term Memory
+            await session.run("""
+                MATCH (wm:Concept {name: 'Working Memory', project_id: $project_id}), 
+                      (ltm:Concept {name: 'Long Term Memory', project_id: $project_id})
+                CREATE (wm)-[:SEMANTIC {
+                    weight: 0.65, 
+                    semantic_weight: 0.65, 
+                    created_by: 'initialization', 
+                    created_at: timestamp(),
+                    project_id: $project_id
+                }]->(ltm)
+            """, project_id=project_id)
+            
+            # Working Memory <-> Self
+            await session.run("""
+                MATCH (wm:Concept {name: 'Working Memory', project_id: $project_id}), 
+                      (self:Concept {name: 'Self', project_id: $project_id})
+                CREATE (wm)-[:SEMANTIC {
+                    weight: 0.70, 
+                    semantic_weight: 0.70, 
+                    created_by: 'initialization', 
+                    created_at: timestamp(),
+                    project_id: $project_id
+                }]->(self)
+            """, project_id=project_id)
+            
+            # Long Term Memory <-> Self
+            await session.run("""
+                MATCH (ltm:Concept {name: 'Long Term Memory', project_id: $project_id}), 
+                      (self:Concept {name: 'Self', project_id: $project_id})
+                CREATE (ltm)-[:SEMANTIC {
+                    weight: 0.75, 
+                    semantic_weight: 0.75, 
+                    created_by: 'initialization', 
+                    created_at: timestamp(),
+                    project_id: $project_id
+                }]->(self)
+            """, project_id=project_id)
+            
+            # Tools <-> Working Memory
+            await session.run("""
+                MATCH (tools:Concept {name: 'Tools', project_id: $project_id}), 
+                      (wm:Concept {name: 'Working Memory', project_id: $project_id})
+                CREATE (tools)-[:SEMANTIC {
+                    weight: 0.60, 
+                    semantic_weight: 0.60, 
+                    created_by: 'initialization', 
+                    created_at: timestamp(),
+                    project_id: $project_id
+                }]->(wm)
+            """, project_id=project_id)
+            
+            # Tools <-> Long Term Memory
+            await session.run("""
+                MATCH (tools:Concept {name: 'Tools', project_id: $project_id}), 
+                      (ltm:Concept {name: 'Long Term Memory', project_id: $project_id})
+                CREATE (tools)-[:SEMANTIC {
+                    weight: 0.55, 
+                    semantic_weight: 0.55, 
+                    created_by: 'initialization', 
+                    created_at: timestamp(),
+                    project_id: $project_id
+                }]->(ltm)
+            """, project_id=project_id)
+            
+            # Tools <-> Self
+            await session.run("""
+                MATCH (tools:Concept {name: 'Tools', project_id: $project_id}), 
+                      (self:Concept {name: 'Self', project_id: $project_id})
+                CREATE (tools)-[:SEMANTIC {
+                    weight: 0.65, 
+                    semantic_weight: 0.65, 
+                    created_by: 'initialization', 
+                    created_at: timestamp(),
+                    project_id: $project_id
+                }]->(self)
+            """, project_id=project_id)
+            
+            core_nodes = ["Self", "Working Memory", "Long Term Memory", "Tools"]
             
             return serialize_for_json({
                 "success": True,
@@ -2235,7 +2340,8 @@ class Neo4jSemanticHypergraphServer:
                 "name": name,
                 "description": description,
                 "core_nodes": core_nodes,
-                "message": f"Created blank consciousness project '{name}' with {len(core_nodes)} core memory nodes"
+                "relationships_created": 6,
+                "message": f"Created blank consciousness project '{name}' with {len(core_nodes)} core memory nodes and 6 semantic relationships"
             })
     
     async def switch_to_project(self, project_description: str) -> Dict[str, Any]:
