@@ -20,7 +20,7 @@ logger = logging.getLogger("tool-manager")
 
 # Argument schemas for tools need to be defined first
 class DreamArgs(BaseModel):
-    iterations: int = Field(default=3, description="Number of dream iterations (1-10)")
+    iterations: int = Field(default=3, description="Number of dream iterations")
 
 class DreamTool(BaseTool):
     """Direct dream tool that calls consciousness engine"""
@@ -38,8 +38,8 @@ class DreamTool(BaseTool):
         """Execute dream session synchronously"""
         import asyncio
         try:
-            # Ensure iterations is within bounds
-            iterations = max(1, min(10, iterations))
+            # Ensure iterations is at least 1
+            iterations = max(1, iterations)
             
             # Run the dream session
             loop = asyncio.new_event_loop()
@@ -57,8 +57,8 @@ class DreamTool(BaseTool):
     async def _arun(self, iterations: int = 3) -> str:
         """Execute dream session asynchronously"""
         try:
-            # Ensure iterations is within bounds
-            iterations = max(1, min(10, iterations))
+            # Ensure iterations is at least 1
+            iterations = max(1, iterations)
             return await self._consciousness_engine.dream_with_ca_evolution(iterations)
         except Exception as e:
             return f"Dream session failed: {str(e)}"
@@ -618,7 +618,7 @@ def extract_iterations_from_text(user_input: str) -> int:
         if match:
             try:
                 num = int(match.group(1))
-                if 1 <= num <= 10:  # Reasonable bounds
+                if num >= 1:  # Only ensure it's at least 1
                     return num
             except ValueError:
                 continue
@@ -811,6 +811,20 @@ def create_neo4j_project_tools() -> List[StreamlinedMCPTool]:
             description="Get information about the current project",
             args_schema=SimpleArgs,
             server_command=server_command
+        ),
+        StreamlinedMCPTool(
+            server_name="neo4j-hypergraph",
+            tool_name="delete_project",
+            description="Delete a project and all its data",
+            args_schema=NukeProjectArgs,
+            server_command=server_command
+        ),
+        StreamlinedMCPTool(
+            server_name="neo4j-hypergraph",
+            tool_name="archive_project",
+            description="Archive a consciousness project (mark as inactive)",
+            args_schema=ProjectArgs,
+            server_command=server_command
         )
     ]
 
@@ -871,46 +885,6 @@ def create_sentence_transformer_tools() -> List[StreamlinedMCPTool]:
         )
     ]
 
-def create_neo4j_admin_tools() -> List[StreamlinedMCPTool]:
-    """Create Neo4j admin tools"""
-    # Get absolute path to the server
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    server_path = os.path.join(os.path.dirname(current_dir), "mcp_servers", "neo4j_hypergraph", "server.py")
-    server_command = ["python", server_path]
-    
-    return [
-        StreamlinedMCPTool(
-            server_name="neo4j-hypergraph",
-            tool_name="clear_all_data",
-            description="Clear all hypergraph data (nuclear option for testing)",
-            args_schema=NukeArgs,
-            server_command=server_command
-        ),
-        StreamlinedMCPTool(
-            server_name="neo4j-hypergraph",
-            tool_name="delete_project",
-            description="Delete a project and all its data",
-            args_schema=NukeProjectArgs,
-            server_command=server_command
-        )
-    ]
-
-def create_qdrant_admin_tools() -> List[StreamlinedMCPTool]:
-    """Create Qdrant admin tools"""
-    # Get absolute path to the server
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    server_path = os.path.join(os.path.dirname(current_dir), "mcp_servers", "qdrant_memory", "server.py")
-    server_command = ["python", server_path]
-    
-    return [
-        StreamlinedMCPTool(
-            server_name="qdrant-memory",
-            tool_name="delete_collection",
-            description="Delete a Qdrant collection",
-            args_schema=NukeQdrantArgs,
-            server_command=server_command
-        )
-    ]
 
 def create_consciousness_tools(consciousness_engine) -> List[BaseTool]:
     """Create consciousness-specific tools that need access to the engine"""
@@ -974,24 +948,8 @@ def create_tool_categories(consciousness_engine=None) -> Dict[str, ToolCategory]
             name="neo4j-projects",
             description="Project and workspace management",
             tools=create_neo4j_project_tools(),
-            priority=4,  # Lower priority
-            always_available=False
-        ),
-
-        "neo4j-admin": ToolCategory(
-            name="neo4j-admin",
-            description="Neo4j administrative tools",
-            tools=create_neo4j_admin_tools(),
-            priority=1,
-            always_available=False
-        ),
-
-        "qdrant-admin": ToolCategory(
-            name="qdrant-admin",
-            description="Qdrant administrative tools",
-            tools=create_qdrant_admin_tools(),
-            priority=1,
-            always_available=False
+            priority=7,  # Raised priority - these are important tools
+            always_available=True  # Always available since Elder needs project management
         )
     }
     
