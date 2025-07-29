@@ -89,8 +89,12 @@ class StreamlinedMCPTool(BaseTool):
         import json
         import tempfile
         import time
+        import ast
         
         start_time = time.time()
+        
+        # Fix for Gemini and other LLMs that pass dictionaries as strings
+        kwargs = self._fix_string_dicts(kwargs)
         
         try:
             # Use subprocess approach to completely avoid async loop conflicts
@@ -319,9 +323,46 @@ if __name__ == "__main__":
         
         return response_str
 
+    def _fix_string_dicts(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """Fix string representations of dictionaries from certain LLMs like Gemini"""
+        import ast
+        fixed_kwargs = {}
+        
+        for key, value in kwargs.items():
+            if isinstance(value, str) and value.strip().startswith('{') and value.strip().endswith('}'):
+                # This looks like a string representation of a dictionary
+                try:
+                    # Try to safely evaluate the string as a Python literal
+                    parsed_value = ast.literal_eval(value)
+                    if isinstance(parsed_value, dict):
+                        logger.debug(f"Converted string dict for key '{key}': {value} -> {parsed_value}")
+                        fixed_kwargs[key] = parsed_value
+                    else:
+                        fixed_kwargs[key] = value
+                except (ValueError, SyntaxError) as e:
+                    logger.warning(f"Failed to parse string dict for key '{key}': {value}, error: {e}")
+                    # Try a more lenient JSON parsing
+                    try:
+                        import json
+                        # Replace single quotes with double quotes for JSON compatibility
+                        json_str = value.replace("'", '"')
+                        parsed_value = json.loads(json_str)
+                        logger.debug(f"Converted string dict using JSON for key '{key}': {value} -> {parsed_value}")
+                        fixed_kwargs[key] = parsed_value
+                    except:
+                        # If all parsing fails, keep the original value
+                        logger.warning(f"Could not parse string dict for key '{key}', keeping as string")
+                        fixed_kwargs[key] = value
+            else:
+                fixed_kwargs[key] = value
+        
+        return fixed_kwargs
+
     async def _arun(self, **kwargs) -> str:
         """Execute the MCP tool asynchronously"""
         try:
+            # Fix string dicts for async execution too
+            kwargs = self._fix_string_dicts(kwargs)
             connection = await MCPConnectionManager.get_connection(tuple(self.server_command))
             return await connection.call_tool(self.tool_name, kwargs)
         except Exception as e:
