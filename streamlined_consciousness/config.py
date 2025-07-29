@@ -33,10 +33,27 @@ class Config:
     OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'llama3.2:latest')
     OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
     OLLAMA_TEMPERATURE = float(os.getenv('OLLAMA_TEMPERATURE', 0.7))
-    OLLAMA_MODEL = os.getenv('OLLAMA_MODEL')
     
     # Dream-specific Ollama Configuration (higher creativity)
     OLLAMA_DREAM_TEMPERATURE = float(os.getenv('OLLAMA_DREAM_TEMPERATURE', 0.9))
+
+    # Gemini Configuration
+    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-pro')
+    GEMINI_TEMPERATURE = float(os.getenv('GEMINI_TEMPERATURE', 0.7))
+    GEMINI_MAX_TOKENS = int(os.getenv('GEMINI_MAX_TOKENS', 4000))
+    
+    # Dream-specific Gemini Configuration (higher creativity)
+    GEMINI_DREAM_TEMPERATURE = float(os.getenv('GEMINI_DREAM_TEMPERATURE', 0.9))
+    GEMINI_DREAM_MAX_TOKENS = int(os.getenv('GEMINI_DREAM_MAX_TOKENS', 8000))
+
+    # OpenAI Configuration
+    OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4-turbo-preview')
+    OPENAI_TEMPERATURE = float(os.getenv('OPENAI_TEMPERATURE', 0.7))
+    OPENAI_MAX_TOKENS = int(os.getenv('OPENAI_MAX_TOKENS', 4000))
+    
+    # Dream-specific OpenAI Configuration (higher creativity)
+    OPENAI_DREAM_TEMPERATURE = float(os.getenv('OPENAI_DREAM_TEMPERATURE', 0.9))
+    OPENAI_DREAM_MAX_TOKENS = int(os.getenv('OPENAI_DREAM_MAX_TOKENS', 8000))
 
     # Database Configuration
     NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')

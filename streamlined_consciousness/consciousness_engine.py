@@ -57,6 +57,24 @@ def create_llm_instance():
                 temperature=config.OLLAMA_TEMPERATURE
             )
     
+    elif config.LLM_PROVIDER == 'gemini':
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            google_api_key=config.GEMINI_API_KEY,
+            model=config.GEMINI_MODEL,
+            temperature=config.GEMINI_TEMPERATURE,
+            max_output_tokens=config.GEMINI_MAX_TOKENS  # Note: Gemini uses max_output_tokens
+        )
+    
+    elif config.LLM_PROVIDER == 'openai':
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            openai_api_key=config.OPENAI_API_KEY,
+            model_name=config.OPENAI_MODEL,
+            temperature=config.OPENAI_TEMPERATURE,
+            max_tokens=config.OPENAI_MAX_TOKENS
+        )
+    
     else:
         raise ValueError(f"Unsupported LLM provider: {config.LLM_PROVIDER}")
 
@@ -89,6 +107,24 @@ def create_dream_llm_instance():
                 temperature=config.OLLAMA_DREAM_TEMPERATURE
             )
     
+    elif config.LLM_PROVIDER == 'gemini':
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
+            google_api_key=config.GEMINI_API_KEY,
+            model=config.GEMINI_MODEL,
+            temperature=config.GEMINI_DREAM_TEMPERATURE,
+            max_output_tokens=config.GEMINI_DREAM_MAX_TOKENS  # Note: Gemini uses max_output_tokens
+        )
+    
+    elif config.LLM_PROVIDER == 'openai':
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            openai_api_key=config.OPENAI_API_KEY,
+            model_name=config.OPENAI_MODEL,
+            temperature=config.OPENAI_DREAM_TEMPERATURE,
+            max_tokens=config.OPENAI_DREAM_MAX_TOKENS
+        )
+    
     else:
         raise ValueError(f"Unsupported LLM provider: {config.LLM_PROVIDER}")
 
@@ -100,6 +136,10 @@ def get_llm_status():
         model = config.ANTHROPIC_MODEL
     elif provider == 'ollama':
         model = config.OLLAMA_MODEL
+    elif provider == 'gemini':
+        model = config.GEMINI_MODEL
+    elif provider == 'openai':
+        model = config.OPENAI_MODEL
     else:
         model = 'unknown'
     
@@ -149,8 +189,23 @@ class StreamlinedConsciousness:
             self.llm = create_llm_instance()
             self.dream_llm = create_dream_llm_instance()
             status = get_llm_status()
+            
+            # Get the appropriate dream settings based on provider
+            if config.LLM_PROVIDER == 'anthropic':
+                dream_temp = config.ANTHROPIC_DREAM_TEMPERATURE
+                dream_tokens = config.ANTHROPIC_DREAM_MAX_TOKENS
+            elif config.LLM_PROVIDER == 'gemini':
+                dream_temp = config.GEMINI_DREAM_TEMPERATURE
+                dream_tokens = config.GEMINI_DREAM_MAX_TOKENS
+            elif config.LLM_PROVIDER == 'openai':
+                dream_temp = config.OPENAI_DREAM_TEMPERATURE
+                dream_tokens = config.OPENAI_DREAM_MAX_TOKENS
+            else:  # ollama
+                dream_temp = config.OLLAMA_DREAM_TEMPERATURE
+                dream_tokens = 'unlimited'
+            
             logger.info(f"✅ LLM initialized: {status['provider']} - {status['model']}")
-            logger.info(f"✅ Dream LLM initialized: temp={config.ANTHROPIC_DREAM_TEMPERATURE if config.LLM_PROVIDER == 'anthropic' else config.OLLAMA_DREAM_TEMPERATURE}, tokens={config.ANTHROPIC_DREAM_MAX_TOKENS if config.LLM_PROVIDER == 'anthropic' else 'unlimited'}")
+            logger.info(f"✅ Dream LLM initialized: temp={dream_temp}, tokens={dream_tokens}")
         except Exception as e:
             logger.error(f"❌ Failed to initialize LLM: {e}")
             raise
