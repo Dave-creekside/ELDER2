@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import subprocess
 import os
 import sys
@@ -547,12 +547,56 @@ class SimpleArgs(BaseModel):
 class ConceptArgs(BaseModel):
     name: str = Field(description="Name of the concept")
     properties: Optional[Dict[str, Any]] = Field(default=None, description="Additional properties (optional)")
+    
+    @field_validator('properties', mode='before')
+    @classmethod
+    def convert_string_dict(cls, v):
+        """Convert string representation of dict to actual dict for Gemini compatibility"""
+        if v is None:
+            return v
+        if isinstance(v, str) and v.strip().startswith('{') and v.strip().endswith('}'):
+            import ast
+            import json
+            try:
+                # Try ast.literal_eval first (safer)
+                return ast.literal_eval(v)
+            except (ValueError, SyntaxError):
+                try:
+                    # Fallback to JSON parsing with single quote conversion
+                    json_str = v.replace("'", '"')
+                    return json.loads(json_str)
+                except:
+                    # If all parsing fails, return empty dict
+                    logger.warning(f"Could not parse string dict in ConceptArgs: {v}")
+                    return {}
+        return v
 
 class RelationshipArgs(BaseModel):
     from_concept: str = Field(description="Source concept")
     to_concept: str = Field(description="Target concept")
     relationship_type: str = Field(description="Type of relationship")
     properties: Dict[str, Any] = Field(default={}, description="Additional properties")
+    
+    @field_validator('properties', mode='before')
+    @classmethod
+    def convert_string_dict(cls, v):
+        """Convert string representation of dict to actual dict for Gemini compatibility"""
+        if isinstance(v, str) and v.strip().startswith('{') and v.strip().endswith('}'):
+            import ast
+            import json
+            try:
+                # Try ast.literal_eval first (safer)
+                return ast.literal_eval(v)
+            except (ValueError, SyntaxError):
+                try:
+                    # Fallback to JSON parsing with single quote conversion
+                    json_str = v.replace("'", '"')
+                    return json.loads(json_str)
+                except:
+                    # If all parsing fails, return empty dict
+                    logger.warning(f"Could not parse string dict in RelationshipArgs: {v}")
+                    return {}
+        return v
 
 class HyperedgeArgs(BaseModel):
     members: List[str] = Field(description="Concepts to connect")
@@ -561,6 +605,24 @@ class HyperedgeArgs(BaseModel):
 class QueryArgs(BaseModel):
     query: str = Field(description="Cypher query to execute")
     parameters: Dict[str, Any] = Field(default={}, description="Query parameters")
+    
+    @field_validator('parameters', mode='before')
+    @classmethod
+    def convert_string_dict(cls, v):
+        """Convert string representation of dict to actual dict for Gemini compatibility"""
+        if isinstance(v, str) and v.strip().startswith('{') and v.strip().endswith('}'):
+            import ast
+            import json
+            try:
+                return ast.literal_eval(v)
+            except (ValueError, SyntaxError):
+                try:
+                    json_str = v.replace("'", '"')
+                    return json.loads(json_str)
+                except:
+                    logger.warning(f"Could not parse string dict in QueryArgs: {v}")
+                    return {}
+        return v
 
 class ConceptExploreArgs(BaseModel):
     concept_name: str = Field(description="Name of the concept to explore")
@@ -570,6 +632,24 @@ class MemoryStoreArgs(BaseModel):
     content: str = Field(description="Content to store")
     vector: List[float] = Field(description="Vector embedding (384 dimensions)")
     metadata: Dict[str, Any] = Field(default={}, description="Additional metadata")
+    
+    @field_validator('metadata', mode='before')
+    @classmethod
+    def convert_string_dict(cls, v):
+        """Convert string representation of dict to actual dict for Gemini compatibility"""
+        if isinstance(v, str) and v.strip().startswith('{') and v.strip().endswith('}'):
+            import ast
+            import json
+            try:
+                return ast.literal_eval(v)
+            except (ValueError, SyntaxError):
+                try:
+                    json_str = v.replace("'", '"')
+                    return json.loads(json_str)
+                except:
+                    logger.warning(f"Could not parse string dict in MemoryStoreArgs: {v}")
+                    return {}
+        return v
 
 class MemorySearchArgs(BaseModel):
     query_vector: List[float] = Field(description="Query vector for similarity search")
@@ -606,6 +686,24 @@ class NukeQdrantArgs(BaseModel):
 class TextMemoryStoreArgs(BaseModel):
     text: str = Field(description="Text content to store")
     metadata: Dict[str, Any] = Field(default={}, description="Additional metadata")
+    
+    @field_validator('metadata', mode='before')
+    @classmethod
+    def convert_string_dict(cls, v):
+        """Convert string representation of dict to actual dict for Gemini compatibility"""
+        if isinstance(v, str) and v.strip().startswith('{') and v.strip().endswith('}'):
+            import ast
+            import json
+            try:
+                return ast.literal_eval(v)
+            except (ValueError, SyntaxError):
+                try:
+                    json_str = v.replace("'", '"')
+                    return json.loads(json_str)
+                except:
+                    logger.warning(f"Could not parse string dict in TextMemoryStoreArgs: {v}")
+                    return {}
+        return v
 
 class TextMemorySearchArgs(BaseModel):
     query_text: str = Field(description="Text to search for")
