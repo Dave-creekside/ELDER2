@@ -65,6 +65,24 @@ class ConsciousnessDashboard:
         
         self.app.router.add_get('/{filename:.+\.html}', serve_html)
         
+        # Serve static CSS and JS files
+        async def serve_static(request):
+            filename = request.match_info.get('filename')
+            static_files = ['elder-dashboard.css', 'elder-dashboard.js']
+            
+            if filename in static_files:
+                file_path = os.path.join(os.path.dirname(__file__), '..', 'frontend', filename)
+                if os.path.exists(file_path):
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    content_type = 'text/css' if filename.endswith('.css') else 'application/javascript'
+                    return web.Response(text=content, content_type=content_type)
+            
+            return web.Response(status=404)
+        
+        self.app.router.add_get('/{filename:.+\.(css|js)}', serve_static)
+        
         # Metrics tracking
         self.ca_ops_counter = 0
         self.last_ca_time = time.time()
