@@ -27,6 +27,8 @@ from qdrant_client.models import (
     MatchValue, SearchRequest, CollectionInfo
 )
 import os
+import re
+from pathlib import Path
 # import aiohttp  # Removed - no longer needed
 
 # Configure logging
@@ -42,6 +44,7 @@ class QdrantMemoryServer:
         self.model = None
         self.model_name = None
         self.device = None
+        self.data_folder = Path(os.getenv("QDRANT_DATA_FOLDER", "./data"))
         self.setup_handlers()
     
     def _lazy_import_sentence_transformers(self):
@@ -263,6 +266,57 @@ class QdrantMemoryServer:
                         },
                         "required": ["query_text"]
                     }
+                ),
+                Tool(
+                    name="embed_document",
+                    description="Embed a document from the data folder into vector memory",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "file_path": {"type": "string", "description": "Path to file relative to data folder"},
+                            "chunk_size": {"type": "integer", "description": "Max chunk size in characters", "default": 1000},
+                            "chunk_overlap": {"type": "integer", "description": "Overlap between chunks", "default": 200},
+                            "metadata": {"type": "object", "description": "Additional metadata to store", "default": {}},
+                            "collection_name": {"type": "string", "description": "Collection to store in", "default": "documents"}
+                        },
+                        "required": ["file_path"]
+                    }
+                ),
+                Tool(
+                    name="list_embedded_documents",
+                    description="List all documents that have been embedded",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "collection_name": {"type": "string", "description": "Collection to list from", "default": "documents"}
+                        }
+                    }
+                ),
+                Tool(
+                    name="delete_document_embeddings",
+                    description="Delete all embeddings from a specific document",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "file_path": {"type": "string", "description": "Path to file that was embedded"},
+                            "collection_name": {"type": "string", "description": "Collection to delete from", "default": "documents"}
+                        },
+                        "required": ["file_path"]
+                    }
+                ),
+                Tool(
+                    name="search_documents",
+                    description="Search through embedded documents",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query_text": {"type": "string", "description": "Text to search for"},
+                            "limit": {"type": "integer", "description": "Maximum number of results", "default": 5},
+                            "file_filter": {"type": "string", "description": "Filter by source file (optional)"},
+                            "collection_name": {"type": "string", "description": "Collection to search in", "default": "documents"}
+                        },
+                        "required": ["query_text"]
+                    }
                 )
             ]
         
@@ -337,6 +391,30 @@ class QdrantMemoryServer:
                         arguments.get("limit", 5),
                         arguments.get("score_threshold", 0.0),
                         arguments.get("collection_name", self.default_collection)
+                    )
+                elif name == "embed_document":
+                    result = await self.embed_document(
+                        arguments["file_path"],
+                        arguments.get("chunk_size", 1000),
+                        arguments.get("chunk_overlap", 200),
+                        arguments.get("metadata", {}),
+                        arguments.get("collection_name", "documents")
+                    )
+                elif name == "list_embedded_documents":
+                    result = await self.list_embedded_documents(
+                        arguments.get("collection_name", "documents")
+                    )
+                elif name == "delete_document_embeddings":
+                    result = await self.delete_document_embeddings(
+                        arguments["file_path"],
+                        arguments.get("collection_name", "documents")
+                    )
+                elif name == "search_documents":
+                    result = await self.search_documents(
+                        arguments["query_text"],
+                        arguments.get("limit", 5),
+                        arguments.get("file_filter"),
+                        arguments.get("collection_name", "documents")
                     )
                 else:
                     raise ValueError(f"Unknown tool: {name}")
@@ -658,6 +736,344 @@ class QdrantMemoryServer:
             }
             
         except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def _read_file_content(self, file_path: Path) -> str:
+        """Read content from various file types"""
+        file_extension = file_path.suffix.lower()
+        
+        try:
+            if file_extension == '.txt':
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+                    
+            elif file_extension == '.md':
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+                    
+            elif file_extension == '.pdf':
+                try:
+                    import PyPDF2
+                    content = []
+                    with open(file_path, 'rb') as f:
+                        pdf_reader = PyPDF2.PdfReader(f)
+                        for page_num in range(len(pdf_reader.pages)):
+                            page = pdf_reader.pages[page_num]
+                            content.append(page.extract_text())
+                    return '\n\n'.join(content)
+                except ImportError:
+                    raise ImportError("PyPDF2 is required for PDF files")
+                    
+            elif file_extension == '.docx':
+                try:
+                    import docx
+                    doc = docx.Document(file_path)
+                    content = []
+                    for para in doc.paragraphs:
+                        if para.text.strip():
+                            content.append(para.text)
+                    return '\n\n'.join(content)
+                except ImportError:
+                    raise ImportError("python-docx is required for DOCX files")
+                    
+            else:
+                # Try to read as text with encoding detection
+                import chardet
+                with open(file_path, 'rb') as f:
+                    raw_data = f.read()
+                    result = chardet.detect(raw_data)
+                    encoding = result['encoding'] or 'utf-8'
+                    return raw_data.decode(encoding)
+                    
+        except Exception as e:
+            logger.error(f"Failed to read file {file_path}: {e}")
+            raise
+    
+    def _chunk_text(self, text: str, chunk_size: int, chunk_overlap: int) -> List[Dict[str, Any]]:
+        """Chunk text into overlapping segments"""
+        chunks = []
+        sentences = re.split(r'[.!?]\s+', text)
+        
+        current_chunk = []
+        current_size = 0
+        
+        for sentence in sentences:
+            sentence_size = len(sentence)
+            
+            if current_size + sentence_size > chunk_size and current_chunk:
+                # Save current chunk
+                chunk_text = '. '.join(current_chunk) + '.'
+                chunks.append({
+                    'text': chunk_text,
+                    'start_index': len(chunks),
+                    'size': len(chunk_text)
+                })
+                
+                # Start new chunk with overlap
+                overlap_sentences = []
+                overlap_size = 0
+                for s in reversed(current_chunk):
+                    if overlap_size + len(s) <= chunk_overlap:
+                        overlap_sentences.insert(0, s)
+                        overlap_size += len(s)
+                    else:
+                        break
+                
+                current_chunk = overlap_sentences + [sentence]
+                current_size = overlap_size + sentence_size
+            else:
+                current_chunk.append(sentence)
+                current_size += sentence_size
+        
+        # Save last chunk
+        if current_chunk:
+            chunk_text = '. '.join(current_chunk) + '.'
+            chunks.append({
+                'text': chunk_text,
+                'start_index': len(chunks),
+                'size': len(chunk_text)
+            })
+        
+        return chunks
+    
+    async def embed_document(self, file_path: str, chunk_size: int, chunk_overlap: int,
+                            metadata: Dict[str, Any], collection_name: str) -> Dict[str, Any]:
+        """Embed a document from the data folder"""
+        try:
+            # Ensure collection exists with proper vector size
+            collection_exists = False
+            try:
+                info = await self.get_collection_info(collection_name)
+                if info.get("success"):
+                    collection_exists = True
+            except Exception as e:
+                logger.info(f"Collection {collection_name} does not exist, will create it")
+            
+            if not collection_exists:
+                # Create collection if it doesn't exist
+                # Load model to get vector size
+                if self.model is None:
+                    await self._load_model()
+                vector_size = self.model.get_sentence_embedding_dimension()
+                logger.info(f"Creating collection {collection_name} with vector size {vector_size}")
+                create_result = await self.create_collection(collection_name, vector_size, "cosine")
+                if not create_result.get("success"):
+                    return {
+                        "success": False,
+                        "error": f"Failed to create collection: {create_result}"
+                    }
+                logger.info(f"Successfully created collection {collection_name}")
+            
+            # Construct full path
+            full_path = self.data_folder / file_path
+            if not full_path.exists():
+                return {
+                    "success": False,
+                    "error": f"File not found: {file_path}"
+                }
+            
+            # Read file content
+            content = await self._read_file_content(full_path)
+            
+            # Chunk the content
+            chunks = self._chunk_text(content, chunk_size, chunk_overlap)
+            
+            # Embed and store each chunk
+            embedded_chunks = 0
+            chunk_ids = []
+            
+            for i, chunk in enumerate(chunks):
+                # Generate embedding
+                vector = await self._generate_embedding(chunk['text'])
+                
+                # Prepare metadata
+                chunk_metadata = {
+                    "source_file": file_path,
+                    "chunk_index": i,
+                    "chunk_size": chunk['size'],
+                    "total_chunks": len(chunks),
+                    "file_type": full_path.suffix,
+                    "embedded_at": asyncio.get_event_loop().time(),
+                    **metadata
+                }
+                
+                # Store chunk
+                result = await self.store_memory(
+                    chunk['text'],
+                    vector,
+                    chunk_metadata,
+                    collection_name
+                )
+                
+                if result["success"]:
+                    embedded_chunks += 1
+                    chunk_ids.append(result["memory_id"])
+            
+            return {
+                "success": True,
+                "file_path": file_path,
+                "chunks_embedded": embedded_chunks,
+                "total_chunks": len(chunks),
+                "chunk_ids": chunk_ids,
+                "collection_name": collection_name
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to embed document: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def list_embedded_documents(self, collection_name: str) -> Dict[str, Any]:
+        """List all documents that have been embedded"""
+        try:
+            # Get all points from collection with minimal data
+            offset = None
+            all_documents = set()
+            
+            while True:
+                # Scroll through all points
+                result = await self.client.scroll(
+                    collection_name=collection_name,
+                    limit=100,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False
+                )
+                
+                points, next_offset = result
+                
+                # Extract unique document paths
+                for point in points:
+                    if 'source_file' in point.payload:
+                        all_documents.add(point.payload['source_file'])
+                
+                if next_offset is None:
+                    break
+                offset = next_offset
+            
+            # Get document details
+            document_info = []
+            for doc_path in all_documents:
+                # Count chunks for this document
+                filter_condition = Filter(
+                    must=[FieldCondition(key="source_file", match=MatchValue(value=doc_path))]
+                )
+                
+                # Get one sample to extract metadata
+                sample = await self.client.search(
+                    collection_name=collection_name,
+                    query_vector=[0.0] * 384,  # Dummy vector
+                    query_filter=filter_condition,
+                    limit=1,
+                    with_payload=True
+                )
+                
+                if sample:
+                    payload = sample[0].payload
+                    document_info.append({
+                        "file_path": doc_path,
+                        "file_type": payload.get("file_type", "unknown"),
+                        "total_chunks": payload.get("total_chunks", 0),
+                        "embedded_at": payload.get("embedded_at", 0),
+                        "metadata": {k: v for k, v in payload.items() 
+                                   if k not in ["source_file", "chunk_index", "chunk_size", 
+                                              "total_chunks", "file_type", "embedded_at", "content"]}
+                    })
+            
+            return {
+                "success": True,
+                "documents": sorted(document_info, key=lambda x: x['file_path']),
+                "count": len(document_info),
+                "collection_name": collection_name
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to list embedded documents: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def delete_document_embeddings(self, file_path: str, collection_name: str) -> Dict[str, Any]:
+        """Delete all embeddings from a specific document"""
+        try:
+            # Create filter for this document
+            filter_condition = Filter(
+                must=[FieldCondition(key="source_file", match=MatchValue(value=file_path))]
+            )
+            
+            # Delete all points matching this filter
+            await self.client.delete(
+                collection_name=collection_name,
+                points_selector=filter_condition
+            )
+            
+            return {
+                "success": True,
+                "file_path": file_path,
+                "collection_name": collection_name,
+                "message": f"All embeddings for '{file_path}' deleted successfully"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to delete document embeddings: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def search_documents(self, query_text: str, limit: int, 
+                             file_filter: Optional[str], collection_name: str) -> Dict[str, Any]:
+        """Search through embedded documents"""
+        try:
+            # Generate embedding for query
+            query_vector = await self._generate_embedding(query_text)
+            
+            # Build filter if file specified
+            search_filter = None
+            if file_filter:
+                search_filter = Filter(
+                    must=[FieldCondition(key="source_file", match=MatchValue(value=file_filter))]
+                )
+            
+            # Search
+            results = await self.client.search(
+                collection_name=collection_name,
+                query_vector=query_vector,
+                limit=limit,
+                query_filter=search_filter,
+                with_payload=True
+            )
+            
+            # Format results
+            search_results = []
+            for result in results:
+                search_results.append({
+                    "id": result.id,
+                    "score": result.score,
+                    "content": result.payload.get("content", ""),
+                    "source_file": result.payload.get("source_file", ""),
+                    "chunk_index": result.payload.get("chunk_index", 0),
+                    "metadata": {k: v for k, v in result.payload.items() 
+                               if k not in ["content", "source_file", "chunk_index"]}
+                })
+            
+            return {
+                "success": True,
+                "query": query_text,
+                "results": search_results,
+                "count": len(search_results),
+                "collection_name": collection_name,
+                "file_filter": file_filter
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to search documents: {e}")
             return {
                 "success": False,
                 "error": str(e)

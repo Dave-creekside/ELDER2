@@ -710,6 +710,26 @@ class TextMemorySearchArgs(BaseModel):
     limit: int = Field(default=5, description="Maximum number of results")
     score_threshold: float = Field(default=0.0, description="Minimum similarity score")
 
+class EmbedDocumentArgs(BaseModel):
+    file_path: str = Field(description="Path to file relative to data folder")
+    chunk_size: int = Field(default=1000, description="Max chunk size in characters")
+    chunk_overlap: int = Field(default=200, description="Overlap between chunks")
+    metadata: Dict[str, Any] = Field(default={}, description="Additional metadata to store")
+    collection_name: str = Field(default="documents", description="Collection to store in")
+
+class ListEmbeddedDocumentsArgs(BaseModel):
+    collection_name: str = Field(default="documents", description="Collection to list from")
+
+class DeleteDocumentEmbeddingsArgs(BaseModel):
+    file_path: str = Field(description="Path to file that was embedded")
+    collection_name: str = Field(default="documents", description="Collection to delete from")
+
+class SearchDocumentsArgs(BaseModel):
+    query_text: str = Field(description="Text to search for")
+    limit: int = Field(default=5, description="Maximum number of results")
+    file_filter: Optional[str] = Field(default=None, description="Filter by source file")
+    collection_name: str = Field(default="documents", description="Collection to search in")
+
 class HausdorffArgs(BaseModel):
     weight_threshold: float = Field(default=0.3, description="Minimum edge weight to consider")
     scale_range: List[float] = Field(default=[0.1, 2.0, 20], description="Scale range [min, max, num_scales]")
@@ -994,6 +1014,34 @@ def create_qdrant_memory_tools() -> List[StreamlinedMCPTool]:
             tool_name="get_collection_info",
             description="Get information about the memory collection",
             args_schema=SimpleArgs,
+            server_command=server_command
+        ),
+        StreamlinedMCPTool(
+            server_name="qdrant-memory",
+            tool_name="embed_document",
+            description="Embed a document from the data folder into vector memory",
+            args_schema=EmbedDocumentArgs,
+            server_command=server_command
+        ),
+        StreamlinedMCPTool(
+            server_name="qdrant-memory",
+            tool_name="list_embedded_documents",
+            description="List all documents that have been embedded",
+            args_schema=ListEmbeddedDocumentsArgs,
+            server_command=server_command
+        ),
+        StreamlinedMCPTool(
+            server_name="qdrant-memory",
+            tool_name="delete_document_embeddings",
+            description="Delete all embeddings from a specific document",
+            args_schema=DeleteDocumentEmbeddingsArgs,
+            server_command=server_command
+        ),
+        StreamlinedMCPTool(
+            server_name="qdrant-memory",
+            tool_name="search_documents",
+            description="Search through embedded documents",
+            args_schema=SearchDocumentsArgs,
             server_command=server_command
         )
     ]

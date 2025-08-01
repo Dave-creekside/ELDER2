@@ -110,14 +110,19 @@ body {
     flex: 1;
     padding: 20px;
     overflow-y: auto;
+    overflow-x: hidden;
     font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+    /* Ensure container doesn't exceed its bounds */
+    min-height: 0;
+    position: relative;
 }
 
 .terminal-messages {
     display: flex;
     flex-direction: column;
     gap: 15px;
-    min-height: 100%;
+    /* Remove min-height to prevent overflow */
+    padding-bottom: 20px;
 }
 
 .message {

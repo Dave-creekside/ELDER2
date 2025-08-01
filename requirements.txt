@@ -28,3 +28,9 @@ aiohttp>=3.8.0
 
 # Dashboard dependencies
 python-socketio[asyncio]>=5.0.0
+
+# Document processing dependencies
+pypdf2>=3.0.0
+python-docx>=1.0.0
+markdown>=3.4.0
+chardet>=5.0.0
