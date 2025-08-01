@@ -28,8 +28,12 @@ class ConsciousnessDashboard:
         # Setup routes
         self.setup_routes()
         
-        # Serve the HUD HTML
+        # Serve the unified dashboard
         async def index(request):
+            return web.Response(text=self.get_unified_dashboard_html(), content_type='text/html')
+        
+        # Also serve individual pages for backward compatibility
+        async def dashboard_legacy(request):
             return web.Response(text=self.get_hud_html(), content_type='text/html')
         
         async def galaxy(request):
@@ -39,8 +43,27 @@ class ConsciousnessDashboard:
             return web.Response(text=self.get_health_html(), content_type='text/html')
         
         self.app.router.add_get('/', index)
+        self.app.router.add_get('/dashboard', dashboard_legacy)
         self.app.router.add_get('/galaxy', galaxy)
         self.app.router.add_get('/health', health)
+        
+        # Serve individual HTML files for the unified dashboard to load
+        async def serve_html(request):
+            filename = request.match_info.get('filename')
+            # Map filenames to the correct method names
+            method_map = {
+                'consciousness-dashboard.html': 'get_hud_html',
+                'consciousness-galaxy.html': 'get_galaxy_html',
+                'health.html': 'get_health_html'
+            }
+            
+            if filename in method_map:
+                method_name = method_map[filename]
+                html_content = getattr(self, method_name)()
+                return web.Response(text=html_content, content_type='text/html')
+            return web.Response(status=404)
+        
+        self.app.router.add_get('/{filename:.+\.html}', serve_html)
         
         # Metrics tracking
         self.ca_ops_counter = 0
@@ -85,6 +108,34 @@ class ConsciousnessDashboard:
         @self.sio.event
         async def request_metrics(sid):
             await self.emit_metrics()
+            
+        @self.sio.event
+        async def chat_message(sid, data):
+            """Handle incoming chat messages from the terminal"""
+            try:
+                message = data.get('message', '').strip()
+                if not message:
+                    await self.sio.emit('chat_error', {
+                        'error': 'Empty message'
+                    }, room=sid)
+                    return
+                
+                logger.info(f"Chat message from {sid}: {message}")
+                
+                # Process the message through Elder
+                response = await self.consciousness.chat(message)
+                
+                # Send response back to client
+                await self.sio.emit('chat_response', {
+                    'message': response,
+                    'timestamp': datetime.now().isoformat()
+                }, room=sid)
+                
+            except Exception as e:
+                logger.error(f"Error processing chat message: {e}")
+                await self.sio.emit('chat_error', {
+                    'error': str(e)
+                }, room=sid)
     
     async def send_full_graph(self, sid=None):
         """Send complete graph structure to client(s)"""
@@ -685,6 +736,41 @@ class ConsciousnessDashboard:
     <h1>ELDER System Health</h1>
     <p class="error">Error loading health monitoring: {e}</p>
     <p>Please ensure health.html is in the frontend directory.</p>
+</body>
+</html>"""
+    
+    def get_unified_dashboard_html(self):
+        """Return the unified dashboard HTML as a string"""
+        try:
+            # Look for HTML file in multiple locations
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '..', 'frontend', 'elder-dashboard.html'),
+                os.path.join(os.path.dirname(__file__), 'elder-dashboard.html'),
+                'frontend/elder-dashboard.html'
+            ]
+            
+            for html_path in possible_paths:
+                if os.path.exists(html_path):
+                    with open(html_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+            
+            raise FileNotFoundError("elder-dashboard.html not found in any expected location")
+            
+        except Exception as e:
+            logger.error(f"Error reading unified dashboard HTML file: {e}")
+            return f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>ELDER Dashboard</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 50px; }}
+        .error {{ color: red; }}
+    </style>
+</head>
+<body>
+    <h1>ELDER Dashboard</h1>
+    <p class="error">Error loading dashboard: {e}</p>
+    <p>Please ensure elder-dashboard.html is in the frontend directory.</p>
 </body>
 </html>"""
     
