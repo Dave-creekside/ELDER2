@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ELDER System Health</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
     <style>
         * {
             margin: 0;
@@ -141,15 +142,6 @@
             pointer-events: none;
         }
         
-        .graph-preview {
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 8px;
-            padding: 16px;
-            margin-top: 16px;
-            font-family: 'SF Mono', Monaco, monospace;
-            font-size: 14px;
-        }
-        
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -158,35 +150,45 @@
         .updating {
             animation: pulse 1s infinite;
         }
+        
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff0040;
+        }
+        
+        .connection-dot.connected {
+            background: #00ff40;
+        }
     </style>
 </head>
 <body>
+    <div class="connection-status">
+        <span class="connection-dot" id="ws-status"></span>
+        <span id="ws-text">Connecting...</span>
+    </div>
+    
     <div class="container">
         <h1>🧠 ELDER System Health</h1>
         <p class="subtitle">Real-time monitoring of Elder's consciousness infrastructure</p>
         
         <div class="health-grid">
-            <!-- Docker Status -->
-            <div class="health-card">
-                <h2>
-                    <span class="status-icon status-unknown" id="docker-status">?</span>
-                    Docker Services
-                </h2>
-                <div class="metric">
-                    <span class="metric-label">Neo4j Database</span>
-                    <span class="metric-value" id="neo4j-status">Checking...</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Qdrant Vector DB</span>
-                    <span class="metric-value" id="qdrant-status">Checking...</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Container Count</span>
-                    <span class="metric-value" id="container-count">-</span>
-                </div>
-            </div>
-            
-            <!-- Graph Statistics -->
+            <!-- 1. Hypergraph Brain (Neo4j) -->
             <div class="health-card">
                 <h2>
                     <span class="status-icon status-unknown" id="graph-status">?</span>
@@ -208,29 +210,17 @@
                     <span class="metric-label">Avg Weight</span>
                     <span class="metric-value" id="avg-weight">-</span>
                 </div>
-            </div>
-            
-            <!-- Memory System -->
-            <div class="health-card">
-                <h2>
-                    <span class="status-icon status-unknown" id="memory-status">?</span>
-                    Vector Memory
-                </h2>
                 <div class="metric">
-                    <span class="metric-label">Collections</span>
-                    <span class="metric-value" id="collection-count">-</span>
+                    <span class="metric-label">Hausdorff Dimension</span>
+                    <span class="metric-value" id="hausdorff-dimension">-</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">Memories Stored</span>
-                    <span class="metric-value" id="memory-count">-</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Embedding Dim</span>
-                    <span class="metric-value" id="embedding-dim">384</span>
+                    <span class="metric-label">R-squared</span>
+                    <span class="metric-value" id="r-squared">-</span>
                 </div>
             </div>
             
-            <!-- LLM Configuration -->
+            <!-- 2. Language Model -->
             <div class="health-card">
                 <h2>
                     <span class="status-icon status-unknown" id="llm-status">?</span>
@@ -245,8 +235,52 @@
                     <span class="metric-value" id="llm-model">-</span>
                 </div>
                 <div class="metric">
+                    <span class="metric-label">Temperature</span>
+                    <span class="metric-value" id="llm-temperature">-</span>
+                </div>
+                <div class="metric">
                     <span class="metric-label">Status</span>
                     <span class="metric-value" id="llm-health">-</span>
+                </div>
+            </div>
+            
+            <!-- 3. Docker Services -->
+            <div class="health-card">
+                <h2>
+                    <span class="status-icon status-unknown" id="docker-status">?</span>
+                    Docker Services
+                </h2>
+                <div class="metric">
+                    <span class="metric-label">Neo4j Database</span>
+                    <span class="metric-value" id="neo4j-status">Checking...</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Qdrant Vector DB</span>
+                    <span class="metric-value" id="qdrant-status">Checking...</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Active Containers</span>
+                    <span class="metric-value" id="container-count">-</span>
+                </div>
+            </div>
+            
+            <!-- 4. Vector Memory (Qdrant) -->
+            <div class="health-card">
+                <h2>
+                    <span class="status-icon status-unknown" id="memory-status">?</span>
+                    Vector Memory
+                </h2>
+                <div class="metric">
+                    <span class="metric-label">Collections</span>
+                    <span class="metric-value" id="collection-count">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Memories Stored</span>
+                    <span class="metric-value" id="memory-count">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Embedding Dimension</span>
+                    <span class="metric-value" id="embedding-dim">-</span>
                 </div>
             </div>
             
@@ -265,8 +299,12 @@
                     <span class="metric-value" id="tool-count">-</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">Response Time</span>
-                    <span class="metric-value" id="response-time">-</span>
+                    <span class="metric-label">Total Tools</span>
+                    <span class="metric-value" id="total-tools">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Uptime</span>
+                    <span class="metric-value" id="uptime">-</span>
                 </div>
             </div>
             
@@ -281,31 +319,29 @@
                     <span class="metric-value" id="last-check">Never</span>
                 </div>
                 <div class="metric">
-                    <span class="metric-label">Uptime</span>
-                    <span class="metric-value" id="uptime">-</span>
-                </div>
-                <div class="metric">
                     <span class="metric-label">Auto-refresh</span>
                     <span class="metric-value">
-                        <input type="checkbox" id="auto-refresh" checked>
+                        <input type="checkbox" id="auto-refresh" disabled>
+                        <small style="color: #666; margin-left: 5px;">Manual only</small>
                     </span>
                 </div>
             </div>
         </div>
         
-        <button class="refresh-btn" onclick="checkHealth()">
+        <button class="refresh-btn" onclick="requestHealthStats(true)">
             🔄 Refresh Status
         </button>
-        
-        <div class="graph-preview" id="graph-preview" style="display: none;">
-            <strong>Graph Structure Preview:</strong>
-            <pre id="graph-structure"></pre>
-        </div>
     </div>
     
     <script>
-        let startTime = Date.now();
+        let socket = null;
         let autoRefreshInterval = null;
+        let startTime = Date.now();
+        let isVisible = false;
+        let hasCalculatedHausdorff = false;
+        let isRequestInProgress = false;
+        let storedHausdorffDimension = null;
+        let storedRSquared = null;
         
         function setStatus(elementId, status) {
             const element = document.getElementById(elementId);
@@ -332,97 +368,233 @@
             }
         }
         
-        function updateUptime() {
-            const now = Date.now();
-            const uptimeMs = now - startTime;
-            const hours = Math.floor(uptimeMs / (1000 * 60 * 60));
-            const minutes = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
-            document.getElementById('uptime').textContent = `${hours}h ${minutes}m`;
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${minutes}m`;
         }
         
-        async function checkHealth() {
-            document.querySelector('.refresh-btn').classList.add('loading');
+        function updateHealthData(data) {
             document.getElementById('last-check').textContent = new Date().toLocaleTimeString();
             
-            // Check Docker services
-            try {
-                // Neo4j
-                const neo4jResponse = await fetch('http://localhost:7474', { mode: 'no-cors' });
-                document.getElementById('neo4j-status').textContent = 'Running';
-                
-                // Qdrant
-                const qdrantResponse = await fetch('http://localhost:6333/health');
-                const qdrantData = await qdrantResponse.json();
-                document.getElementById('qdrant-status').textContent = qdrantData.status === 'ok' ? 'Healthy' : 'Issues';
-                
-                setStatus('docker-status', 'healthy');
-                document.getElementById('container-count').textContent = '2';
-            } catch (e) {
-                setStatus('docker-status', 'error');
-                document.getElementById('neo4j-status').textContent = 'Offline';
-                document.getElementById('qdrant-status').textContent = 'Offline';
+            // Handle errors
+            if (data.error) {
+                console.error('Health data error:', data.error);
+                return;
             }
             
-            // Check Dashboard/Socket.IO
-            try {
-                const dashboardResponse = await fetch('http://localhost:5000/socket.io/?EIO=4&transport=polling');
-                if (dashboardResponse.ok) {
-                    document.getElementById('dashboard-status').textContent = 'Connected';
-                    setStatus('system-status', 'healthy');
+            // 1. Hypergraph Brain (Neo4j)
+            if (data.graph) {
+                const graph = data.graph;
+                if (!graph.error) {
+                    document.getElementById('node-count').textContent = graph.node_count || '0';
+                    document.getElementById('edge-count').textContent = graph.edge_count || '0';
+                    document.getElementById('hyperedge-count').textContent = graph.hyperedge_count || '0';
+                    document.getElementById('avg-weight').textContent = 
+                        graph.avg_weight ? graph.avg_weight.toFixed(3) : '0.000';
                     
-                    // Try to get graph stats from dashboard
-                    // This would need a proper API endpoint
-                    document.getElementById('tool-count').textContent = '9';
+                    // Hausdorff dimension and R-squared - store values when calculated
+                    if (graph.hausdorff_dimension !== undefined && graph.hausdorff_dimension !== null) {
+                        storedHausdorffDimension = graph.hausdorff_dimension;
+                        storedRSquared = graph.r_squared;
+                    }
+                    
+                    // Always display stored values if available
+                    if (storedHausdorffDimension !== null) {
+                        document.getElementById('hausdorff-dimension').textContent = 
+                            storedHausdorffDimension.toFixed(6);
+                    } else {
+                        document.getElementById('hausdorff-dimension').textContent = 
+                            'Click refresh to calculate';
+                    }
+                    
+                    if (storedRSquared !== null) {
+                        document.getElementById('r-squared').textContent = 
+                            storedRSquared.toFixed(6);
+                    } else {
+                        document.getElementById('r-squared').textContent = '-';
+                    }
+                    
+                    setStatus('graph-status', graph.node_count > 0 ? 'healthy' : 'warning');
+                } else {
+                    setStatus('graph-status', 'error');
                 }
-            } catch (e) {
-                document.getElementById('dashboard-status').textContent = 'Offline';
-                setStatus('system-status', 'warning');
             }
             
-            // Simulated data for demo (replace with real API calls)
-            document.getElementById('node-count').textContent = '9';
-            document.getElementById('edge-count').textContent = '15';
-            document.getElementById('hyperedge-count').textContent = '3';
-            document.getElementById('avg-weight').textContent = '0.65';
-            setStatus('graph-status', 'healthy');
+            // 2. Language Model
+            if (data.llm) {
+                const llm = data.llm;
+                document.getElementById('llm-provider').textContent = llm.provider || '-';
+                document.getElementById('llm-model').textContent = llm.model || '-';
+                document.getElementById('llm-temperature').textContent = 
+                    llm.temperature !== undefined ? llm.temperature.toFixed(1) : '-';
+                document.getElementById('llm-health').textContent = llm.status || '-';
+                
+                setStatus('llm-status', llm.status === 'Ready' ? 'healthy' : 'warning');
+            }
             
-            // Memory stats
-            document.getElementById('collection-count').textContent = '1';
-            document.getElementById('memory-count').textContent = '0';
-            setStatus('memory-status', 'healthy');
+            // 3. Docker Services
+            if (data.docker) {
+                const docker = data.docker;
+                if (!docker.error) {
+                    document.getElementById('neo4j-status').textContent = docker.neo4j || '-';
+                    document.getElementById('qdrant-status').textContent = docker.qdrant || '-';
+                    document.getElementById('container-count').textContent = docker.container_count || '0';
+                    
+                    const allRunning = docker.neo4j === 'Running' && docker.qdrant === 'Running';
+                    setStatus('docker-status', allRunning ? 'healthy' : 'warning');
+                } else {
+                    setStatus('docker-status', 'error');
+                    document.getElementById('neo4j-status').textContent = 'Error';
+                    document.getElementById('qdrant-status').textContent = 'Error';
+                }
+            }
             
-            // LLM info
-            document.getElementById('llm-provider').textContent = 'ollama';
-            document.getElementById('llm-model').textContent = 'llama3.2';
-            document.getElementById('llm-health').textContent = 'Ready';
-            setStatus('llm-status', 'healthy');
+            // 4. Vector Memory (Qdrant)
+            if (data.qdrant) {
+                const qdrant = data.qdrant;
+                if (!qdrant.error) {
+                    document.getElementById('collection-count').textContent = qdrant.collection_count || '0';
+                    document.getElementById('memory-count').textContent = qdrant.memory_count || '0';
+                    document.getElementById('embedding-dim').textContent = qdrant.embedding_dim || '-';
+                    
+                    setStatus('memory-status', 'healthy');
+                } else {
+                    setStatus('memory-status', 'error');
+                }
+            }
             
-            // Response time
-            const responseTime = Date.now() - startTime;
-            document.getElementById('response-time').textContent = `${Math.min(responseTime, 150)}ms`;
-            
-            updateUptime();
+            // 5. System Performance
+            if (data.system) {
+                const system = data.system;
+                document.getElementById('dashboard-status').textContent = system.dashboard_status || '-';
+                document.getElementById('tool-count').textContent = system.tool_count || '0';
+                document.getElementById('total-tools').textContent = system.total_tools || '0';
+                document.getElementById('uptime').textContent = 
+                    system.uptime ? formatUptime(system.uptime) : '-';
+                
+                setStatus('system-status', system.dashboard_status === 'Connected' ? 'healthy' : 'warning');
+            }
             
             document.querySelector('.refresh-btn').classList.remove('loading');
+            isRequestInProgress = false;
+        }
+        
+        function requestHealthStats(calculateHausdorff = null) {
+            if (!socket || !socket.connected) {
+                console.error('Socket not connected');
+                return;
+            }
+            
+            // Prevent overlapping requests
+            if (isRequestInProgress) {
+                console.log('Request already in progress, skipping...');
+                return;
+            }
+            
+            isRequestInProgress = true;
+            document.querySelector('.refresh-btn').classList.add('loading');
+            
+            // Determine if we should calculate hausdorff
+            const shouldCalculateHausdorff = calculateHausdorff !== null ? 
+                calculateHausdorff : 
+                !hasCalculatedHausdorff;
+            
+            socket.emit('get_health_stats', { 
+                calculate_hausdorff: shouldCalculateHausdorff 
+            });
+            
+            if (shouldCalculateHausdorff) {
+                hasCalculatedHausdorff = true;
+            }
+        }
+        
+        function initializeSocket() {
+            socket = io('http://localhost:5000', {
+                reconnectionDelay: 1000,
+                reconnection: true,
+                reconnectionAttempts: 10,
+                transports: ['websocket', 'polling']
+            });
+            
+            socket.on('connect', () => {
+                console.log('Connected to ELDER dashboard');
+                document.getElementById('ws-status').classList.add('connected');
+                document.getElementById('ws-text').textContent = 'Connected';
+                
+                // Request initial health stats
+                requestHealthStats();
+            });
+            
+            socket.on('disconnect', () => {
+                console.log('Disconnected from ELDER dashboard');
+                document.getElementById('ws-status').classList.remove('connected');
+                document.getElementById('ws-text').textContent = 'Disconnected';
+            });
+            
+            socket.on('health_stats', (data) => {
+                console.log('Received health stats:', data);
+                updateHealthData(data);
+            });
+            
+            socket.on('error', (error) => {
+                console.error('Socket error:', error);
+            });
         }
         
         // Auto-refresh toggle
         document.getElementById('auto-refresh').addEventListener('change', (e) => {
-            if (e.target.checked) {
-                autoRefreshInterval = setInterval(checkHealth, 5000);
+            if (e.target.checked && isVisible) {
+                startAutoRefresh();
             } else {
-                clearInterval(autoRefreshInterval);
+                stopAutoRefresh();
             }
         });
         
-        // Initial check
-        checkHealth();
+        function startAutoRefresh() {
+            if (autoRefreshInterval) return; // Already running
+            
+            // Use longer interval (10 seconds) and don't calculate hausdorff on auto-refresh
+            autoRefreshInterval = setInterval(() => {
+                if (isVisible && !isRequestInProgress) {
+                    requestHealthStats(false); // false = don't calculate hausdorff
+                }
+            }, 10000);
+        }
         
-        // Start auto-refresh
-        autoRefreshInterval = setInterval(checkHealth, 5000);
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
         
-        // Update uptime every second
-        setInterval(updateUptime, 1000);
+        // Listen for visibility messages from parent
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'visibility') {
+                isVisible = event.data.visible;
+                
+                if (isVisible) {
+                    console.log('Health tab became visible');
+                    
+                    // Only request stats if we haven't calculated hausdorff yet
+                    if (!hasCalculatedHausdorff || storedHausdorffDimension === null) {
+                        requestHealthStats(true);
+                    }
+                    // Otherwise do nothing - user can manually refresh if they want updated stats
+                } else {
+                    console.log('Health tab became hidden');
+                }
+            }
+        });
+        
+        // Initialize on load
+        window.addEventListener('load', () => {
+            initializeSocket();
+            
+            // Don't start auto-refresh immediately - wait for visibility
+            // The parent will send a visibility message when this tab is shown
+        });
     </script>
 </body>
 </html>

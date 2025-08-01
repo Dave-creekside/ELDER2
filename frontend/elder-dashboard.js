@@ -29,8 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.style.display = 'none';
     });
     
-    // Show Graph tab
-    showTab('graph');
+    // Show Graph tab - call without event on startup
+    showTab('graph', null);
     console.log('Dashboard initialized with Graph tab');
 });
 
@@ -49,52 +49,90 @@ function cacheElements() {
 // Setup tab switching
 function setupTabSwitching() {
     elements.tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
+        tab.addEventListener('click', (event) => {
             const targetTab = tab.dataset.tab;
-            showTab(targetTab);
+            showTab(targetTab, event);
         });
     });
 }
 
 // Show specific tab
-function showTab(tabName) {
-    console.log(`Switching to tab: ${tabName}`);
-    
-    // Update active states on tabs
-    elements.tabs.forEach(tab => {
-        if (tab.dataset.tab === tabName) {
-            tab.classList.add('active');
-        } else {
-            tab.classList.remove('active');
-        }
-    });
-    
-    // Update active states on content and explicitly set display
-    elements.tabContents.forEach(content => {
-        if (content.id === `${tabName}-tab`) {
-            content.classList.add('active');
-            // Special handling for terminal tab which needs flex
-            if (content.id === 'terminal-tab') {
-                content.style.display = 'flex';
-            } else {
-                content.style.display = 'block';
-            }
-            console.log(`Showing ${content.id}`);
-        } else {
+    function showTab(tabName, event) {
+        console.log(`showTab called with: ${tabName}`);
+        
+        // Debug: List all tab-content elements
+        console.log('Available tab contents:', Array.from(document.querySelectorAll('.tab-content')).map(el => el.id));
+        
+        // Hide all tab contents
+        const contents = document.querySelectorAll('.tab-content');
+        contents.forEach(content => {
             content.classList.remove('active');
             content.style.display = 'none';
-            console.log(`Hiding ${content.id}`);
+            
+            // Notify iframe it's being hidden
+            const iframe = content.querySelector('iframe');
+            if (iframe && iframe.contentWindow) {
+                try {
+                    iframe.contentWindow.postMessage({ type: 'visibility', visible: false }, '*');
+                } catch (e) {
+                    // Iframe might not be ready yet
+                }
+            }
+        });
+        
+        // Remove active from all tabs
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+            tab.classList.remove('active');
+        });
+        
+        // Show selected content
+        const selectedContent = document.getElementById(`${tabName}-tab`);
+        if (selectedContent) {
+            selectedContent.classList.add('active');
+            selectedContent.style.display = 'block';
+        } else {
+            console.error(`Tab content not found: ${tabName}-tab`);
+            // Try to list what IDs are actually available
+            console.log('Available element IDs:', Array.from(document.querySelectorAll('[id]')).map(el => el.id));
+            return; // Exit early if tab not found
         }
-    });
-    
-    currentTab = tabName;
-    
-    // Initialize terminal if needed
-    if (tabName === 'terminal' && !socket) {
-        initializeSocket();
-        initializeTerminal();
+        
+        // Mark tab as active
+        if (event && event.target) {
+            event.target.classList.add('active');
+        } else {
+            // Find the tab button for this tabName
+            const tabButton = document.querySelector(`.tab[data-tab="${tabName}"]`);
+            if (tabButton) {
+                tabButton.classList.add('active');
+            }
+        }
+        
+        // Notify the newly visible iframe
+        if (selectedContent) {
+            const activeIframe = selectedContent.querySelector('iframe');
+            if (activeIframe && activeIframe.contentWindow) {
+                // Small delay to ensure iframe is ready
+                setTimeout(() => {
+                    activeIframe.contentWindow.postMessage({ 
+                        type: 'visibility', 
+                        visible: true,
+                        tabName: tabName 
+                    }, '*');
+                }, 100);
+            }
+        }
+        
+        // Save current tab
+        currentTab = tabName;
+        
+        // Initialize terminal if needed
+        if (tabName === 'terminal' && !socket) {
+            initializeSocket();
+            initializeTerminal();
+        }
     }
-}
 
 // Initialize Socket.IO connection
 function initializeSocket() {

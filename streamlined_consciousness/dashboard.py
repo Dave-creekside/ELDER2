@@ -14,6 +14,7 @@ import threading
 import time
 import os
 import logging
+from streamlined_consciousness.config import config
 
 logger = logging.getLogger("consciousness-dashboard")
 
@@ -63,7 +64,7 @@ class ConsciousnessDashboard:
                 return web.Response(text=html_content, content_type='text/html')
             return web.Response(status=404)
         
-        self.app.router.add_get('/{filename:.+\.html}', serve_html)
+        self.app.router.add_get(r'/{filename:.+\.html}', serve_html)
         
         # Serve static CSS and JS files
         async def serve_static(request):
@@ -81,7 +82,7 @@ class ConsciousnessDashboard:
             
             return web.Response(status=404)
         
-        self.app.router.add_get('/{filename:.+\.(css|js)}', serve_static)
+        self.app.router.add_get(r'/{filename:.+\.(css|js)}', serve_static)
         
         # Metrics tracking
         self.ca_ops_counter = 0
@@ -154,6 +155,267 @@ class ConsciousnessDashboard:
                 await self.sio.emit('chat_error', {
                     'error': str(e)
                 }, room=sid)
+        
+        @self.sio.event
+        async def get_health_stats(sid, data=None):
+            """Get real-time health statistics using available tools"""
+            try:
+                # Extract parameters
+                calculate_hausdorff = True  # Default to true for backward compatibility
+                if data and isinstance(data, dict):
+                    calculate_hausdorff = data.get('calculate_hausdorff', True)
+                
+                logger.info(f"Getting health stats (calculate_hausdorff={calculate_hausdorff})")
+                
+                health_data = {}
+                
+                # 1. Hypergraph Brain stats using Neo4j tools
+                neo4j_stats = {}
+                try:
+                    # Simple and direct: find tools by exact name match
+                    stats_tool = None
+                    hausdorff_tool = None
+                    
+                    # Log available tools for debugging
+                    all_tool_names = []
+                    for category in self.consciousness.tool_categories.values():
+                        for tool in category.tools:
+                            all_tool_names.append(tool.name)
+                            # Match exact tool names from the Neo4j server (note: underscore not hyphen)
+                            if tool.name == 'neo4j_hypergraph_get_graph_stats':
+                                stats_tool = tool
+                                logger.info(f"Found stats tool: {tool.name}")
+                            elif tool.name == 'neo4j_hypergraph_calculate_hausdorff_dimension':
+                                hausdorff_tool = tool
+                                logger.info(f"Found hausdorff tool: {tool.name}")
+                    
+                    logger.info(f"Available tools: {all_tool_names}")
+                    
+                    if stats_tool:
+                        # Execute the tool directly
+                        logger.info("Executing get_graph_stats tool...")
+                        stats_result = await asyncio.to_thread(stats_tool._run)
+                        
+                        # Log raw result
+                        logger.info(f"Raw graph stats result: {stats_result}")
+                        
+                        # Parse the result
+                        if isinstance(stats_result, str):
+                            try:
+                                stats = json.loads(stats_result)
+                            except json.JSONDecodeError:
+                                logger.error(f"Failed to parse stats result as JSON: {stats_result}")
+                                stats = {}
+                        else:
+                            stats = stats_result
+                        
+                        # Extract values with correct field names from Neo4j server
+                        if stats.get('success', False):
+                            neo4j_stats = {
+                                'node_count': stats.get('concept_count', 0),  # Note: field is 'concept_count'
+                                'edge_count': stats.get('semantic_relationships', 0),  # Note: field is 'semantic_relationships'
+                                'hyperedge_count': stats.get('hyperedge_count', 0),
+                                'avg_weight': stats.get('avg_semantic_weight', 0.0)
+                            }
+                            logger.info(f"Extracted Neo4j stats: {neo4j_stats}")
+                        else:
+                            logger.warning("Stats tool returned success=false")
+                            neo4j_stats = {
+                                'node_count': 0,
+                                'edge_count': 0,
+                                'hyperedge_count': 0,
+                                'avg_weight': 0.0
+                            }
+                    else:
+                        logger.warning("Stats tool not found, using direct query...")
+                        # Direct query fallback
+                        query = """
+                        MATCH (n:Concept) 
+                        WITH count(n) as nodes
+                        OPTIONAL MATCH ()-[r:SEMANTIC]-()
+                        WITH nodes, count(r)/2 as edges, avg(coalesce(r.weight, r.semantic_weight)) as avgWeight
+                        OPTIONAL MATCH (h:Hyperedge)
+                        RETURN nodes, edges, count(h) as hyperedges, avgWeight
+                        """
+                        result = await self._query_neo4j_directly(query)
+                        if result and result.get('records') and len(result['records']) > 0:
+                            record = result['records'][0]
+                            neo4j_stats = {
+                                'node_count': record.get('nodes', 0),
+                                'edge_count': record.get('edges', 0),
+                                'hyperedge_count': record.get('hyperedges', 0),
+                                'avg_weight': round(record.get('avgWeight', 0) if record.get('avgWeight') is not None else 0, 3)
+                            }
+                        else:
+                            logger.warning("Direct query returned no records")
+                            neo4j_stats = {
+                                'node_count': 0,
+                                'edge_count': 0,
+                                'hyperedge_count': 0,
+                                'avg_weight': 0.0
+                            }
+                    
+                    # Calculate Hausdorff dimension if we have nodes and it's requested
+                    if hausdorff_tool and neo4j_stats.get('node_count', 0) > 0 and calculate_hausdorff:
+                        try:
+                            logger.info(f"Calculating Hausdorff dimension for {neo4j_stats['node_count']} nodes...")
+                            
+                            # Call hausdorff tool with parameters
+                            hausdorff_result = await asyncio.to_thread(
+                                hausdorff_tool._run,
+                                weight_threshold=0.3,
+                                scale_range=[0.1, 2.0, 20],
+                                project_id='default',
+                                store_history=True
+                            )
+                            
+                            logger.info(f"Raw Hausdorff result: {hausdorff_result}")
+                            
+                            # Parse result
+                            if isinstance(hausdorff_result, str):
+                                hausdorff_data = json.loads(hausdorff_result)
+                            else:
+                                hausdorff_data = hausdorff_result
+                            
+                            if hausdorff_data.get('success'):
+                                neo4j_stats['hausdorff_dimension'] = hausdorff_data.get('hausdorff_dimension', 0.0)
+                                neo4j_stats['r_squared'] = hausdorff_data.get('r_squared', 0.0)
+                                logger.info(f"Hausdorff dimension: {neo4j_stats['hausdorff_dimension']}, R²: {neo4j_stats['r_squared']}")
+                            else:
+                                logger.warning(f"Hausdorff calculation failed: {hausdorff_data}")
+                                neo4j_stats['hausdorff_dimension'] = None
+                                neo4j_stats['r_squared'] = None
+                                
+                        except Exception as e:
+                            logger.error(f"Failed to calculate Hausdorff dimension: {e}", exc_info=True)
+                            neo4j_stats['hausdorff_dimension'] = None
+                            neo4j_stats['r_squared'] = None
+                    elif neo4j_stats.get('node_count', 0) == 0:
+                        logger.info("No nodes in graph, skipping Hausdorff calculation")
+                        neo4j_stats['hausdorff_dimension'] = None
+                        neo4j_stats['r_squared'] = None
+                    else:
+                        logger.warning("Hausdorff tool not found")
+                        neo4j_stats['hausdorff_dimension'] = None
+                        neo4j_stats['r_squared'] = None
+                    
+                except Exception as e:
+                    logger.error(f"Error getting Neo4j stats: {e}", exc_info=True)
+                    neo4j_stats = {
+                        'node_count': 0,
+                        'edge_count': 0,
+                        'hyperedge_count': 0,
+                        'avg_weight': 0.0,
+                        'hausdorff_dimension': None,
+                        'r_squared': None,
+                        'error': str(e)
+                    }
+                
+                health_data['graph'] = neo4j_stats
+                
+                # 2. Language Model configuration
+                from streamlined_consciousness.config import config
+                llm_data = {
+                    'provider': config.LLM_PROVIDER,
+                    'model': getattr(config, f"{config.LLM_PROVIDER.upper()}_MODEL", "unknown"),
+                    'temperature': getattr(config, f"{config.LLM_PROVIDER.upper()}_TEMPERATURE", 0.7),
+                    'status': 'Ready'
+                }
+                health_data['llm'] = llm_data
+                
+                # 3. Docker Services status
+                docker_data = {}
+                try:
+                    # Check Neo4j container
+                    neo4j_check = await asyncio.to_thread(
+                        os.system, 
+                        "docker ps --filter name=elder-neo4j --format '{{.Status}}' | grep -q Up"
+                    )
+                    docker_data['neo4j'] = 'Running' if neo4j_check == 0 else 'Stopped'
+                    
+                    # Check Qdrant container
+                    qdrant_check = await asyncio.to_thread(
+                        os.system,
+                        "docker ps --filter name=elder-qdrant --format '{{.Status}}' | grep -q Up"
+                    )
+                    docker_data['qdrant'] = 'Running' if qdrant_check == 0 else 'Stopped'
+                    
+                    # Count total containers
+                    container_count = os.popen("docker ps --filter 'name=elder' -q | wc -l").read().strip()
+                    docker_data['container_count'] = int(container_count) if container_count.isdigit() else 0
+                    
+                except Exception as e:
+                    logger.error(f"Error checking Docker status: {e}")
+                    docker_data = {'error': str(e)}
+                
+                health_data['docker'] = docker_data
+                
+                # 4. Vector Memory (Qdrant) stats
+                qdrant_data = {}
+                try:
+                    # Find qdrant collection info tool
+                    qdrant_tool = None
+                    for category in self.consciousness.tool_categories.values():
+                        for tool in category.tools:
+                            if 'qdrant' in tool.name and 'collection_info' in tool.name:
+                                qdrant_tool = tool
+                                break
+                        if qdrant_tool:
+                            break
+                    
+                    if qdrant_tool:
+                        info_result = await asyncio.to_thread(qdrant_tool._run, collection_name="memory")
+                        if isinstance(info_result, str):
+                            info = json.loads(info_result)
+                        else:
+                            info = info_result
+                        
+                        qdrant_data = {
+                            'collection_count': 1,  # We use one collection named "memory"
+                            'memory_count': info.get('vectors_count', 0),
+                            'embedding_dim': info.get('config', {}).get('params', {}).get('vectors', {}).get('size', 384)
+                        }
+                    else:
+                        # Direct API call to Qdrant
+                        from qdrant_client import QdrantClient
+                        client = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
+                        collections = await asyncio.to_thread(client.get_collections)
+                        collection_count = len(collections.collections)
+                        
+                        try:
+                            info = await asyncio.to_thread(client.get_collection, "memory")
+                            qdrant_data = {
+                                'collection_count': collection_count,
+                                'memory_count': info.vectors_count,
+                                'embedding_dim': info.config.params.vectors.size
+                            }
+                        except:
+                            qdrant_data = {
+                                'collection_count': collection_count,
+                                'memory_count': 0,
+                                'embedding_dim': 384
+                            }
+                except Exception as e:
+                    logger.error(f"Error getting Qdrant stats: {e}")
+                    qdrant_data = {'error': str(e)}
+                
+                health_data['qdrant'] = qdrant_data
+                
+                # 5. System performance
+                system_data = {
+                    'dashboard_status': 'Connected',
+                    'tool_count': len(self.consciousness.tool_categories),
+                    'total_tools': sum(len(cat.tools) for cat in self.consciousness.tool_categories.values()),
+                    'uptime': int(time.time() - self.last_ca_time)  # Using last_ca_time as a proxy for start time
+                }
+                health_data['system'] = system_data
+                
+                # Send the health data
+                await self.sio.emit('health_stats', health_data, room=sid)
+                
+            except Exception as e:
+                logger.error(f"Error getting health stats: {e}")
+                await self.sio.emit('health_stats', {'error': str(e)}, room=sid)
     
     async def send_full_graph(self, sid=None):
         """Send complete graph structure to client(s)"""
