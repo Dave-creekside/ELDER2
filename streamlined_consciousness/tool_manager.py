@@ -731,6 +731,7 @@ class SearchDocumentsArgs(BaseModel):
     collection_name: str = Field(default="documents", description="Collection to search in")
 
 class HausdorffArgs(BaseModel):
+    dimension_method: str = Field(default="box_counting", description="Method to use: box_counting, correlation, information, sandbox, mass_radius, local_pointwise, multifractal")
     weight_threshold: float = Field(default=0.3, description="Minimum edge weight to consider")
     scale_range: List[float] = Field(default=[0.1, 2.0, 20], description="Scale range [min, max, num_scales]")
     project_id: str = Field(default="default", description="Project ID to analyze")
@@ -889,7 +890,7 @@ def create_neo4j_core_tools() -> List[StreamlinedMCPTool]:
         StreamlinedMCPTool(
             server_name="neo4j-hypergraph",
             tool_name="calculate_hausdorff_dimension",
-            description="Calculate the Hausdorff (fractal) dimension of the semantic hypergraph using box-counting method",
+            description="Calculate the fractal dimension of the semantic hypergraph. Available methods: box_counting (default), correlation, information, sandbox, mass_radius, local_pointwise, multifractal. Use dimension_method parameter to specify method.",
             args_schema=HausdorffArgs,
             server_command=server_command
         )

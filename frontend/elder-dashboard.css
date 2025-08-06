@@ -108,11 +108,10 @@ body {
 
 .terminal-container {
     flex: 1;
-    padding: 20px;
     overflow-y: auto;
     overflow-x: hidden;
     font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-    /* Ensure container doesn't exceed its bounds */
+    /* Critical for proper scrolling in flexbox */
     min-height: 0;
     position: relative;
 }
@@ -121,8 +120,9 @@ body {
     display: flex;
     flex-direction: column;
     gap: 15px;
-    /* Remove min-height to prevent overflow */
-    padding-bottom: 20px;
+    padding: 20px;
+    /* Ensure messages don't force container to grow */
+    min-height: min-content;
 }
 
 .message {

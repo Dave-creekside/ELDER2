@@ -856,14 +856,24 @@ class ConsciousnessDashboard:
                                     to_concept = kwargs.get('to_concept', 'unknown')
                                     weight = result_data.get('semantic_weight', 0.5)
                                     
-                                    # Emit edge event asynchronously
-                                    asyncio.create_task(self.emit_edge_event(
-                                        'created',
-                                        from_concept,
-                                        to_concept,
-                                        weight,
-                                        {'created_by': 'elder', 'type': kwargs.get('relationship_type', 'RELATED')}
-                                    ))
+                                    # Emit edge event - handle async from sync context
+                                    try:
+                                        loop = asyncio.get_event_loop()
+                                        if loop.is_running():
+                                            # If there's a running loop, schedule the coroutine
+                                            asyncio.ensure_future(self.emit_edge_event(
+                                                'created',
+                                                from_concept,
+                                                to_concept,
+                                                weight,
+                                                {'created_by': 'elder', 'type': kwargs.get('relationship_type', 'RELATED')}
+                                            ))
+                                        else:
+                                            # No event loop, skip emission
+                                            logger.debug("No event loop available for edge event emission")
+                                    except RuntimeError:
+                                        # No event loop in current thread
+                                        logger.debug("Cannot emit edge event - no event loop in thread")
                             except Exception as e:
                                 logger.warning(f"Failed to emit edge event: {e}")
                             
@@ -889,14 +899,22 @@ class ConsciousnessDashboard:
                                 if result_data.get('success'):
                                     # Emit trace that node was deleted
                                     node_name = kwargs.get('name', 'unknown')
-                                    asyncio.create_task(self.emit_trace({
-                                        'type': 'node_deleted',
-                                        'timestamp': datetime.now().strftime('%H:%M:%S'),
-                                        'message': f'Deleted concept node: {node_name}'
-                                    }))
-                                    
-                                    # Send full graph update after deletion
-                                    asyncio.create_task(self.send_full_graph())
+                                    try:
+                                        loop = asyncio.get_event_loop()
+                                        if loop.is_running():
+                                            # If there's a running loop, schedule the coroutines
+                                            asyncio.ensure_future(self.emit_trace({
+                                                'type': 'node_deleted',
+                                                'timestamp': datetime.now().strftime('%H:%M:%S'),
+                                                'message': f'Deleted concept node: {node_name}'
+                                            }))
+                                            
+                                            # Send full graph update after deletion
+                                            asyncio.ensure_future(self.send_full_graph())
+                                        else:
+                                            logger.debug("No event loop available for deletion event emission")
+                                    except RuntimeError:
+                                        logger.debug("Cannot emit deletion event - no event loop in thread")
                                     
                             except Exception as e:
                                 logger.warning(f"Failed to emit deletion event: {e}")

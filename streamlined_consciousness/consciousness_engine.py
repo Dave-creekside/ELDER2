@@ -313,10 +313,21 @@ Use tools naturally to explore and evolve your knowledge structure during conver
             # Create a tool executor function for the semantic CA
             async def neo4j_tool_executor(tool_name: str, arguments: dict):
                 # Find the tool in our registered tools
+                # The semantic CA calls with short names, but actual tool names have prefixes
                 for category in self.tool_categories.values():
                     for tool in category.tools:
-                        if tool.name.endswith(tool_name):
+                        # Match if the tool name ends with the requested name
+                        # e.g., "neo4j_hypergraph_get_ca_connection_candidates" matches "get_ca_connection_candidates"
+                        if tool.name.endswith(tool_name) or tool.name == f"neo4j_hypergraph_{tool_name}":
+                            logger.info(f"🔧 CA executing tool: {tool.name}")
                             return await asyncio.to_thread(tool._run, **arguments)
+                
+                # Log available tools for debugging
+                available_tools = []
+                for category in self.tool_categories.values():
+                    for tool in category.tools:
+                        available_tools.append(tool.name)
+                logger.error(f"Tool {tool_name} not found. Available tools: {available_tools}")
                 raise ValueError(f"Tool {tool_name} not found")
             
             self.semantic_ca = SemanticCellularAutomata(neo4j_tool_executor)

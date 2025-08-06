@@ -195,6 +195,13 @@ function initializeTerminal() {
         
         socket.on('chat_response', handleChatResponse);
         socket.on('chat_error', handleChatError);
+        
+        // Also listen for thinking status
+        socket.on('thinking_status', (data) => {
+            if (!data.active) {
+                hideThinking();
+            }
+        });
     }
 }
 
@@ -202,6 +209,8 @@ function initializeTerminal() {
 function sendMessage() {
     const message = elements.chatInput.value.trim();
     if (!message) return;
+    
+    console.log('Sending message:', message);
     
     // Add user message to display
     addMessage('user', message);
@@ -215,8 +224,10 @@ function sendMessage() {
     
     // Send to server
     if (socket && socket.connected) {
+        console.log('Emitting chat_message to socket');
         socket.emit('chat_message', { message });
     } else {
+        console.log('Socket not connected');
         addMessage('system', 'Not connected to ELDER. Please wait...');
         hideThinking();
     }
@@ -224,18 +235,22 @@ function sendMessage() {
 
 // Handle chat response
 function handleChatResponse(data) {
+    console.log('Received chat response:', data);
     hideThinking();
     addMessage('elder', data.message);
 }
 
 // Handle chat error
 function handleChatError(data) {
+    console.log('Received chat error:', data);
     hideThinking();
     addMessage('system', `Error: ${data.error}`);
 }
 
 // Add message to chat
 function addMessage(type, content) {
+    console.log(`Adding message: type=${type}, content=${content.substring(0, 50)}...`);
+    
     const message = document.createElement('div');
     message.className = `message ${type}`;
     
@@ -251,14 +266,24 @@ function addMessage(type, content) {
     message.appendChild(time);
     message.appendChild(messageContent);
     
-    elements.messagesContainer.appendChild(message);
+    // Ensure the thinking indicator is not in the way
+    const thinkingEl = document.querySelector('.thinking-indicator');
+    if (thinkingEl && thinkingEl.parentNode === elements.messagesContainer) {
+        elements.messagesContainer.insertBefore(message, thinkingEl);
+    } else {
+        elements.messagesContainer.appendChild(message);
+    }
+    
+    console.log(`Messages in container: ${elements.messagesContainer.children.length}`);
     scrollToBottom();
 }
 
 // Show thinking indicator
 function showThinking() {
+    console.log('Showing thinking indicator');
     elements.thinkingIndicator.classList.add('active');
-    elements.messagesContainer.appendChild(elements.thinkingIndicator);
+    // Don't append to messages container, it might be causing issues
+    // Just show it in place
     scrollToBottom();
 }
 
@@ -304,3 +329,34 @@ window.debugTabs = function() {
 
 // Make showTab available globally for debugging
 window.showTab = showTab;
+
+// Debug function to test chat UI
+window.testChat = function() {
+    console.log('Testing chat UI...');
+    
+    // Switch to terminal tab
+    showTab('terminal', null);
+    
+    // Add test messages
+    setTimeout(() => {
+        console.log('Adding test user message...');
+        addMessage('user', 'Test message from user');
+    }, 500);
+    
+    setTimeout(() => {
+        console.log('Showing thinking...');
+        showThinking();
+    }, 1000);
+    
+    setTimeout(() => {
+        console.log('Adding Elder response...');
+        hideThinking();
+        addMessage('elder', 'This is a test response from Elder. The chat UI is working correctly!');
+    }, 2000);
+    
+    setTimeout(() => {
+        console.log('Test complete. Check if messages are visible.');
+        console.log('Messages container children:', elements.messagesContainer.children.length);
+        console.log('Container scroll height:', document.querySelector('.terminal-container').scrollHeight);
+    }, 2500);
+};
