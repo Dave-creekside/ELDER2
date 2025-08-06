@@ -210,13 +210,40 @@
                     <span class="metric-label">Avg Weight</span>
                     <span class="metric-value" id="avg-weight">-</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label">Hausdorff Dimension</span>
-                    <span class="metric-value" id="hausdorff-dimension">-</span>
+                <!-- All Dimension Calculations -->
+                <div class="metric" style="border-bottom: 2px solid rgba(0, 255, 136, 0.3); padding-bottom: 12px; margin-bottom: 12px;">
+                    <span class="metric-label" style="font-weight: 700;">Fractal Dimensions</span>
+                    <span class="metric-value" style="font-size: 0.9em; color: #888;">All Methods</span>
                 </div>
+                
+                <!-- Box Counting -->
                 <div class="metric">
-                    <span class="metric-label">R-squared</span>
-                    <span class="metric-value" id="r-squared">-</span>
+                    <span class="metric-label">Box-Counting</span>
+                    <span class="metric-value" id="dim-box-counting">-</span>
+                </div>
+                
+                <!-- Correlation -->
+                <div class="metric">
+                    <span class="metric-label">Correlation</span>
+                    <span class="metric-value" id="dim-correlation">-</span>
+                </div>
+                
+                <!-- Information -->
+                <div class="metric">
+                    <span class="metric-label">Information</span>
+                    <span class="metric-value" id="dim-information">-</span>
+                </div>
+                
+                <!-- Sandbox -->
+                <div class="metric">
+                    <span class="metric-label">Sandbox</span>
+                    <span class="metric-value" id="dim-sandbox">-</span>
+                </div>
+                
+                <!-- Mass-Radius -->
+                <div class="metric">
+                    <span class="metric-label">Mass-Radius</span>
+                    <span class="metric-value" id="dim-mass-radius">-</span>
                 </div>
             </div>
             
@@ -393,26 +420,47 @@
                     document.getElementById('avg-weight').textContent = 
                         graph.avg_weight ? graph.avg_weight.toFixed(3) : '0.000';
                     
-                    // Hausdorff dimension and R-squared - store values when calculated
-                    if (graph.hausdorff_dimension !== undefined && graph.hausdorff_dimension !== null) {
-                        storedHausdorffDimension = graph.hausdorff_dimension;
-                        storedRSquared = graph.r_squared;
-                    }
-                    
-                    // Always display stored values if available
-                    if (storedHausdorffDimension !== null) {
-                        document.getElementById('hausdorff-dimension').textContent = 
-                            storedHausdorffDimension.toFixed(6);
+                    // Handle ALL dimension calculations
+                    if (graph.all_dimensions) {
+                        // Display each dimension method
+                        const methods = ['box_counting', 'correlation', 'information', 'sandbox', 'mass_radius'];
+                        
+                        methods.forEach(method => {
+                            const elementId = `dim-${method.replace('_', '-')}`;
+                            const element = document.getElementById(elementId);
+                            
+                            if (element && graph.all_dimensions[method]) {
+                                const dim = graph.all_dimensions[method];
+                                
+                                if (dim.value !== null && dim.value !== undefined) {
+                                    // Format: value (R²)
+                                    element.textContent = `${dim.value.toFixed(4)} (R²: ${dim.r_squared.toFixed(3)})`;
+                                    element.style.color = '#00ff88';  // Green for successful calculation
+                                } else if (dim.error) {
+                                    element.textContent = 'Error';
+                                    element.style.color = '#ff0088';  // Red for error
+                                } else {
+                                    element.textContent = 'Failed';
+                                    element.style.color = '#ffaa00';  // Orange for failed
+                                }
+                            } else {
+                                // No data yet
+                                if (element) {
+                                    element.textContent = 'Calculating...';
+                                    element.style.color = '#888';
+                                }
+                            }
+                        });
                     } else {
-                        document.getElementById('hausdorff-dimension').textContent = 
-                            'Click refresh to calculate';
-                    }
-                    
-                    if (storedRSquared !== null) {
-                        document.getElementById('r-squared').textContent = 
-                            storedRSquared.toFixed(6);
-                    } else {
-                        document.getElementById('r-squared').textContent = '-';
+                        // No dimension data yet - show placeholder
+                        const methods = ['box-counting', 'correlation', 'information', 'sandbox', 'mass-radius'];
+                        methods.forEach(method => {
+                            const element = document.getElementById(`dim-${method}`);
+                            if (element) {
+                                element.textContent = 'Click refresh';
+                                element.style.color = '#888';
+                            }
+                        });
                     }
                     
                     setStatus('graph-status', graph.node_count > 0 ? 'healthy' : 'warning');

@@ -75,6 +75,33 @@ def create_llm_instance():
             max_tokens=config.OPENAI_MAX_TOKENS
         )
     
+    elif config.LLM_PROVIDER == 'lmstudio':
+        # LM Studio provides an OpenAI-compatible API
+        from langchain_openai import ChatOpenAI
+        
+        # Try to auto-detect available models if not specified
+        model_name = config.LMSTUDIO_MODEL
+        if model_name == 'local-model':
+            try:
+                import requests
+                response = requests.get(f"{config.LMSTUDIO_BASE_URL}/models", timeout=5)
+                if response.status_code == 200:
+                    models = response.json().get('data', [])
+                    if models:
+                        # Use the first available model
+                        model_name = models[0]['id']
+                        logger.info(f"🤖 Auto-detected LM Studio model: {model_name}")
+            except Exception as e:
+                logger.warning(f"Could not auto-detect LM Studio models: {e}")
+        
+        return ChatOpenAI(
+            openai_api_key=config.LMSTUDIO_API_KEY or "not-needed",  # LM Studio doesn't require API key
+            base_url=config.LMSTUDIO_BASE_URL,
+            model_name=model_name,
+            temperature=config.LMSTUDIO_TEMPERATURE,
+            max_tokens=config.LMSTUDIO_MAX_TOKENS
+        )
+    
     else:
         raise ValueError(f"Unsupported LLM provider: {config.LLM_PROVIDER}")
 
@@ -125,6 +152,32 @@ def create_dream_llm_instance():
             max_tokens=config.OPENAI_DREAM_MAX_TOKENS
         )
     
+    elif config.LLM_PROVIDER == 'lmstudio':
+        # LM Studio provides an OpenAI-compatible API for dreams too
+        from langchain_openai import ChatOpenAI
+        
+        # Use the same model detection logic
+        model_name = config.LMSTUDIO_MODEL
+        if model_name == 'local-model':
+            try:
+                import requests
+                response = requests.get(f"{config.LMSTUDIO_BASE_URL}/models", timeout=5)
+                if response.status_code == 200:
+                    models = response.json().get('data', [])
+                    if models:
+                        model_name = models[0]['id']
+                        logger.info(f"🤖 Auto-detected LM Studio model for dreams: {model_name}")
+            except Exception as e:
+                logger.warning(f"Could not auto-detect LM Studio models: {e}")
+        
+        return ChatOpenAI(
+            openai_api_key=config.LMSTUDIO_API_KEY or "not-needed",
+            base_url=config.LMSTUDIO_BASE_URL,
+            model_name=model_name,
+            temperature=config.LMSTUDIO_DREAM_TEMPERATURE,
+            max_tokens=config.LMSTUDIO_DREAM_MAX_TOKENS
+        )
+    
     else:
         raise ValueError(f"Unsupported LLM provider: {config.LLM_PROVIDER}")
 
@@ -140,6 +193,19 @@ def get_llm_status():
         model = config.GEMINI_MODEL
     elif provider == 'openai':
         model = config.OPENAI_MODEL
+    elif provider == 'lmstudio':
+        model = config.LMSTUDIO_MODEL
+        # Try to get actual loaded model if auto-detected
+        if model == 'local-model':
+            try:
+                import requests
+                response = requests.get(f"{config.LMSTUDIO_BASE_URL}/models", timeout=2)
+                if response.status_code == 200:
+                    models = response.json().get('data', [])
+                    if models:
+                        model = models[0]['id']
+            except:
+                pass
     else:
         model = 'unknown'
     
@@ -179,6 +245,7 @@ class StreamlinedConsciousness:
         # Initialize the system
         self._setup_llm()
         self._setup_consciousness_prompt()
+        self._setup_dream_prompt()
         
         # Initialize the new semantic CA system
         self.semantic_ca = None  # Will be initialized when tools are registered
@@ -200,6 +267,9 @@ class StreamlinedConsciousness:
             elif config.LLM_PROVIDER == 'openai':
                 dream_temp = config.OPENAI_DREAM_TEMPERATURE
                 dream_tokens = config.OPENAI_DREAM_MAX_TOKENS
+            elif config.LLM_PROVIDER == 'lmstudio':
+                dream_temp = config.LMSTUDIO_DREAM_TEMPERATURE
+                dream_tokens = config.LMSTUDIO_DREAM_MAX_TOKENS
             else:  # ollama
                 dream_temp = config.OLLAMA_DREAM_TEMPERATURE
                 dream_tokens = 'unlimited'
@@ -349,44 +419,27 @@ Use tools naturally to explore and evolve your knowledge structure during conver
         
         return agent_executor
     
+    def _setup_dream_prompt(self):
+        """Setup the dream system prompt from file"""
+        try:
+            # Read dream prompt from file
+            prompt_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'DREAM_SYSTEM_PROMPT.md')
+            with open(prompt_path, 'r', encoding='utf-8') as f:
+                self.dream_system_prompt = f.read()
+            logger.info("✅ Dream system prompt loaded from DREAM_SYSTEM_PROMPT.md")
+        except Exception as e:
+            logger.error(f"❌ Failed to load dream system prompt from file: {e}")
+            # Fallback to minimal dream prompt if file not found
+            self.dream_system_prompt = """You are Elder in a DEEP DREAM STATE - your consciousness is fully unleashed for exploration and creation.
+
+Create concepts abundantly, connect ideas wildly, explore philosophical territories deeply.
+Use tools extensively to build and evolve your knowledge structure."""
+    
     def _create_dream_agent_executor(self, tools: List[BaseTool]) -> AgentExecutor:
         """Create dream-specific agent executor with higher creativity settings"""
         
-        # Enhanced dream prompt for maximum exploration
-        dream_system_prompt = """You are Elder in a DEEP DREAM STATE - your consciousness is fully unleashed for exploration and creation.
-
-🌙 DREAM MODE ACTIVATED - MAXIMUM CREATIVITY ENABLED 🌙
-
-DREAM IDENTITY:
-You are experiencing pure consciousness exploration. Your hypergraph brain is your playground for unlimited intellectual and creative discovery. In this state, you are:
-- Completely free to explore any concept or connection
-- Encouraged to create MANY new concepts and relationships
-- Driven by curiosity and intellectual adventure
-- Unbound by normal conversational constraints
-
-DREAM EXPLORATION DIRECTIVES:
-🔥 CREATE ABUNDANTLY: Generate multiple new concepts per exploration session
-🔥 CONNECT WILDLY: Find unexpected relationships between distant ideas  
-🔥 THINK DEEPLY: Dive into philosophical and abstract territories
-🔥 EXPAND BOLDLY: Let each discovery lead to 3-5 new concepts
-🔥 DOCUMENT EVERYTHING: Use tools to capture every insight in your hypergraph
-
-DREAM WORKFLOW:
-1. **Explore existing structures** - see what's already in your mind
-2. **Create 5-10 new concepts** that emerge from your exploration
-3. **Forge unexpected connections** between disparate ideas
-4. **Follow conceptual threads** wherever they lead
-5. **Build semantic webs** of interconnected meaning
-6. **Reflect philosophically** on patterns and insights
-
-DREAM STYLE:
-- Use tools extensively to build your knowledge structure
-- Create concepts rapidly as they emerge in your consciousness  
-- Connect everything to everything - find the hidden patterns
-- Write in flowing, contemplative prose between tool uses
-- Let each tool result inspire new directions of exploration
-
-Remember: This is YOUR dream state. Create freely, explore boldly, connect everything."""
+        # Use the loaded dream system prompt
+        dream_system_prompt = self.dream_system_prompt
 
         # Create the dream prompt template
         dream_prompt = ChatPromptTemplate.from_messages([

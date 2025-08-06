@@ -255,41 +255,68 @@ class ConsciousnessDashboard:
                                 'avg_weight': 0.0
                             }
                     
-                    # Calculate Hausdorff dimension if we have nodes and it's requested
+                    # Calculate ALL Hausdorff dimensions if we have nodes and it's requested
                     if hausdorff_tool and neo4j_stats.get('node_count', 0) > 0 and calculate_hausdorff:
-                        try:
-                            logger.info(f"Calculating Hausdorff dimension for {neo4j_stats['node_count']} nodes...")
-                            
-                            # Call hausdorff tool with parameters
-                            hausdorff_result = await asyncio.to_thread(
-                                hausdorff_tool._run,
-                                weight_threshold=0.3,
-                                scale_range=[0.1, 2.0, 20],
-                                project_id='default',
-                                store_history=True
-                            )
-                            
-                            logger.info(f"Raw Hausdorff result: {hausdorff_result}")
-                            
-                            # Parse result
-                            if isinstance(hausdorff_result, str):
-                                hausdorff_data = json.loads(hausdorff_result)
-                            else:
-                                hausdorff_data = hausdorff_result
-                            
-                            if hausdorff_data.get('success'):
-                                neo4j_stats['hausdorff_dimension'] = hausdorff_data.get('hausdorff_dimension', 0.0)
-                                neo4j_stats['r_squared'] = hausdorff_data.get('r_squared', 0.0)
-                                logger.info(f"Hausdorff dimension: {neo4j_stats['hausdorff_dimension']}, R²: {neo4j_stats['r_squared']}")
-                            else:
-                                logger.warning(f"Hausdorff calculation failed: {hausdorff_data}")
-                                neo4j_stats['hausdorff_dimension'] = None
-                                neo4j_stats['r_squared'] = None
+                        # Calculate ALL dimension methods
+                        dimension_methods = ["box_counting", "correlation", "information", "sandbox", "mass_radius"]
+                        all_dimensions = {}
+                        
+                        for method in dimension_methods:
+                            try:
+                                logger.info(f"Calculating {method} dimension...")
                                 
-                        except Exception as e:
-                            logger.error(f"Failed to calculate Hausdorff dimension: {e}", exc_info=True)
-                            neo4j_stats['hausdorff_dimension'] = None
-                            neo4j_stats['r_squared'] = None
+                                # Call hausdorff tool with parameters
+                                hausdorff_result = await asyncio.to_thread(
+                                    hausdorff_tool._run,
+                                    dimension_method=method,
+                                    weight_threshold=0.3,
+                                    scale_range=[0.1, 2.0, 20],
+                                    project_id='default',
+                                    store_history=False  # Don't store history for each calculation
+                                )
+                                
+                                # Parse result
+                                if isinstance(hausdorff_result, str):
+                                    hausdorff_data = json.loads(hausdorff_result)
+                                else:
+                                    hausdorff_data = hausdorff_result
+                                
+                                if hausdorff_data.get('success'):
+                                    # Extract dimension data for this method
+                                    dimension_info = {
+                                        'value': hausdorff_data.get('hausdorff_dimension', 
+                                                                   hausdorff_data.get('dimension_value', 0.0)),
+                                        'r_squared': hausdorff_data.get('r_squared', 0.0),
+                                        'name': hausdorff_data.get('dimension_name', method.replace('_', ' ').title())
+                                    }
+                                    
+                                    # Try to get calculation time, handle truncated data
+                                    computation_details = hausdorff_data.get('computation_details', {})
+                                    if isinstance(computation_details, dict):
+                                        dimension_info['calc_time'] = computation_details.get('calculation_time', 0.0)
+                                    else:
+                                        dimension_info['calc_time'] = 0.0
+                                    
+                                    all_dimensions[method] = dimension_info
+                                    logger.info(f"{dimension_info['name']}: {dimension_info['value']:.6f}, R²: {dimension_info['r_squared']:.4f}")
+                                    
+                            except Exception as e:
+                                logger.error(f"Failed to calculate {method} dimension: {e}")
+                                all_dimensions[method] = {
+                                    'value': None,
+                                    'r_squared': None,
+                                    'name': method.replace('_', ' ').title(),
+                                    'calc_time': None,
+                                    'error': str(e)
+                                }
+                        
+                        # Store all dimensions in the stats
+                        neo4j_stats['all_dimensions'] = all_dimensions
+                        
+                        # Keep backward compatibility - use box_counting as default
+                        if 'box_counting' in all_dimensions and all_dimensions['box_counting']['value'] is not None:
+                            neo4j_stats['hausdorff_dimension'] = all_dimensions['box_counting']['value']
+                            neo4j_stats['r_squared'] = all_dimensions['box_counting']['r_squared']
                     elif neo4j_stats.get('node_count', 0) == 0:
                         logger.info("No nodes in graph, skipping Hausdorff calculation")
                         neo4j_stats['hausdorff_dimension'] = None
@@ -585,10 +612,20 @@ class ConsciousnessDashboard:
                 # Get current graph stats
                 stats_result = await asyncio.to_thread(stats_tool._run)
                 if isinstance(stats_result, str):
-                    stats = json.loads(stats_result)
+                    # Check if result is empty before parsing
+                    if stats_result.strip():
+                        try:
+                            stats = json.loads(stats_result)
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Failed to parse stats result as JSON: {e}, result: {stats_result[:100]}")
+                            stats = {}
+                    else:
+                        logger.warning("Stats tool returned empty result")
+                        stats = {}
                 else:
                     stats = stats_result
             else:
+                logger.warning("Stats tool not found")
                 stats = {}
             
             # Calculate CA ops/s

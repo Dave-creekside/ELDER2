@@ -19,6 +19,7 @@ class Config:
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
     GROQ_API_KEY = os.getenv('GROQ_API_KEY')
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    LMSTUDIO_API_KEY = os.getenv('LMSTUDIO_API_KEY')  # Optional for LM Studio
 
     # Anthropic Configuration
     ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514')
@@ -55,6 +56,16 @@ class Config:
     OPENAI_DREAM_TEMPERATURE = float(os.getenv('OPENAI_DREAM_TEMPERATURE', 0.9))
     OPENAI_DREAM_MAX_TOKENS = int(os.getenv('OPENAI_DREAM_MAX_TOKENS', 8000))
 
+    # LM Studio Configuration (OpenAI-compatible local API)
+    LMSTUDIO_BASE_URL = os.getenv('LMSTUDIO_BASE_URL', 'http://localhost:1234/v1')
+    LMSTUDIO_MODEL = os.getenv('LMSTUDIO_MODEL', 'local-model')  # Will be auto-detected
+    LMSTUDIO_TEMPERATURE = float(os.getenv('LMSTUDIO_TEMPERATURE', 0.7))
+    LMSTUDIO_MAX_TOKENS = int(os.getenv('LMSTUDIO_MAX_TOKENS', 4000))
+    
+    # Dream-specific LM Studio Configuration (higher creativity)
+    LMSTUDIO_DREAM_TEMPERATURE = float(os.getenv('LMSTUDIO_DREAM_TEMPERATURE', 0.9))
+    LMSTUDIO_DREAM_MAX_TOKENS = int(os.getenv('LMSTUDIO_DREAM_MAX_TOKENS', 8000))
+
     # Database Configuration
     NEO4J_URI = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
     NEO4J_USERNAME = os.getenv('NEO4J_USERNAME', 'neo4j')
@@ -86,6 +97,7 @@ class Config:
             raise ValueError("GROQ_API_KEY is required for the groq provider")
         if Config.LLM_PROVIDER == 'openai' and not Config.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is required for the openai provider")
+        # LM Studio doesn't require validation as it's a local server
 
 # Create a single config instance
 config = Config()
