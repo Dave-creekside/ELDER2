@@ -13,7 +13,7 @@ from typing import Optional
 
 from streamlined_consciousness.consciousness_engine import consciousness
 from streamlined_consciousness.tool_manager import register_all_tools
-from streamlined_consciousness.config import config
+from .config import config
 try:
     from streamlined_consciousness.consciousness_metrics import calculate_post_response_metrics, get_metrics_instance
 except ImportError:

@@ -140,26 +140,98 @@ else
     fi
 fi
 
-# Check for Python 3
+# Check for Python 3.10+
 echo ""
 echo "🐍 Checking Python..."
-if ! command_exists python3; then
-    echo -e "${RED}❌ Python 3 not found${NC}"
-    echo "Please install Python 3.8 or higher"
-    exit 1
-else
-    PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-    echo -e "${GREEN}✅ Python $PYTHON_VERSION found${NC}"
+
+# Function to check python version
+check_python_version() {
+    local cmd=$1
+    if command_exists "$cmd"; then
+        local ver=$($cmd -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+        local major=$(echo "$ver" | cut -d. -f1)
+        local minor=$(echo "$ver" | cut -d. -f2)
+        
+        if [ "$major" -eq 3 ] && [ "$minor" -ge 10 ]; then
+            echo "$cmd"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+PYTHON_CMD=""
+
+# Check python3 first
+if check_python_version "python3" > /dev/null; then
+    PYTHON_CMD="python3"
+# Check specific versions
+elif check_python_version "python3.11" > /dev/null; then
+    PYTHON_CMD="python3.11"
+elif check_python_version "python3.12" > /dev/null; then
+    PYTHON_CMD="python3.12"
+elif check_python_version "python3.10" > /dev/null; then
+    PYTHON_CMD="python3.10"
 fi
+
+if [ -z "$PYTHON_CMD" ]; then
+    echo -e "${RED}❌ Python 3.10+ not found${NC}"
+    echo "The 'mcp' library requires Python 3.10 or higher."
+    
+    if [[ "$OS" == "Darwin" ]]; then
+        echo ""
+        echo "💡 Recommended: Install Python 3.11 via Homebrew"
+        if command_exists brew; then
+            echo "Run: brew install python@3.11"
+            echo ""
+            read -p "Would you like to try installing it now? (y/n) " choice
+            if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
+                brew install python@3.11
+                PYTHON_CMD="python3.11"
+            fi
+        else
+            echo "Please install Homebrew first: https://brew.sh"
+        fi
+    fi
+    
+    if [ -z "$PYTHON_CMD" ]; then
+        echo "Please install Python 3.10+ and run this script again."
+        exit 1
+    fi
+fi
+
+VER=$($PYTHON_CMD -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+echo -e "${GREEN}✅ Using $PYTHON_CMD ($VER)${NC}"
 
 # Create virtual environment
 echo ""
 echo "🔧 Setting up Python virtual environment..."
-if [ ! -d "venv" ]; then
-    python3 -m venv venv
-    echo -e "${GREEN}✅ Virtual environment created${NC}"
+
+# Check if existing venv is compatible
+if [ -d "venv" ]; then
+    if [ -f "venv/bin/python" ]; then
+        VENV_VER=$(venv/bin/python -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+        VENV_MAJOR=$(echo "$VENV_VER" | cut -d. -f1)
+        VENV_MINOR=$(echo "$VENV_VER" | cut -d. -f2)
+        
+        if [ "$VENV_MAJOR" -eq 3 ] && [ "$VENV_MINOR" -ge 10 ]; then
+            echo "✅ Virtual environment already exists and is compatible ($VENV_VER)"
+        else
+            echo -e "${YELLOW}⚠️  Existing virtual environment is too old ($VENV_VER)${NC}"
+            echo "Recreating virtual environment..."
+            rm -rf venv
+            $PYTHON_CMD -m venv venv
+            echo -e "${GREEN}✅ Virtual environment created${NC}"
+        fi
+    else
+        echo "⚠️  Broken virtual environment detected. Recreating..."
+        rm -rf venv
+        $PYTHON_CMD -m venv venv
+        echo -e "${GREEN}✅ Virtual environment created${NC}"
+    fi
 else
-    echo "✅ Virtual environment already exists"
+    $PYTHON_CMD -m venv venv
+    echo -e "${GREEN}✅ Virtual environment created${NC}"
 fi
 
 # Activate virtual environment

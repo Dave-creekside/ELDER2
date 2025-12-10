@@ -14,7 +14,7 @@ import threading
 import time
 import os
 import logging
-from streamlined_consciousness.config import config
+from .config import config
 
 logger = logging.getLogger("consciousness-dashboard")
 
@@ -341,7 +341,7 @@ class ConsciousnessDashboard:
                 health_data['graph'] = neo4j_stats
                 
                 # 2. Language Model configuration
-                from streamlined_consciousness.config import config
+                from .config import config
                 llm_data = {
                     'provider': config.LLM_PROVIDER,
                     'model': getattr(config, f"{config.LLM_PROVIDER.upper()}_MODEL", "unknown"),
@@ -950,7 +950,7 @@ class ConsciousnessDashboard:
             """Initialize Neo4j driver at startup"""
             try:
                 from neo4j import GraphDatabase
-                from streamlined_consciousness.config import config
+                from .config import config
                 
                 self.neo4j_driver = GraphDatabase.driver(
                     config.NEO4J_URI, 
