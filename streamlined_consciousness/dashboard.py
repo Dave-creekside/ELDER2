@@ -524,8 +524,8 @@ class ConsciousnessDashboard:
             neo4j_tool = None
             for category in self.consciousness.tool_categories.values():
                 for tool in category.tools:
-                    # The actual tool name is neo4j-hypergraph_query_cypher
-                    if tool.name == 'neo4j-hypergraph_query_cypher' or 'query_cypher' in tool.name:
+                    # The actual tool name is neo4j_hypergraph_query_cypher
+                    if tool.name == 'neo4j_hypergraph_query_cypher' or 'query_cypher' in tool.name:
                         neo4j_tool = tool
                         logger.info(f"Found Neo4j query tool: {tool.name}")
                         break
@@ -673,8 +673,8 @@ class ConsciousnessDashboard:
             stats_tool = None
             for category in self.consciousness.tool_categories.values():
                 for tool in category.tools:
-                    # The actual tool name is neo4j-hypergraph_get_graph_stats
-                    if tool.name == 'neo4j-hypergraph_get_graph_stats' or 'get_graph_stats' in tool.name:
+                    # The actual tool name is neo4j_hypergraph_get_graph_stats
+                    if tool.name == 'neo4j_hypergraph_get_graph_stats' or 'get_graph_stats' in tool.name:
                         stats_tool = tool
                         # Don't log every time - this runs every second
                         break

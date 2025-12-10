@@ -211,7 +211,7 @@ class StreamlinedConsciousnessInterface:
         print("Listing all projects...")
         
         # Find the tool by name
-        tool = next((t for t in self.consciousness.tool_categories["neo4j-projects"].tools if t.name == "neo4j-hypergraph_list_my_projects"), None)
+        tool = next((t for t in self.consciousness.tool_categories["neo4j-projects"].tools if t.name == "neo4j_hypergraph_list_my_projects"), None)
         
         if not tool:
             print("❌ Error: list_my_projects tool not found.")

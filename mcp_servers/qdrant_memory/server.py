@@ -451,6 +451,13 @@ class QdrantMemoryServer:
     async def store_memory(self, content: str, vector: List[float], 
                           metadata: Dict[str, Any], collection_name: str) -> Dict[str, Any]:
         """Store a memory with its vector"""
+        # Ensure collection exists
+        try:
+            await self.client.get_collection(collection_name)
+        except Exception:
+            logger.info(f"Collection {collection_name} not found, creating it...")
+            await self.create_collection(collection_name, len(vector), "cosine")
+
         memory_id = str(uuid.uuid4())
         
         # Add content to metadata
@@ -488,9 +495,9 @@ class QdrantMemoryServer:
                 conditions.append(FieldCondition(key=key, match=MatchValue(value=value)))
             search_filter = Filter(must=conditions)
         
-        results = await self.client.search(
+        response = await self.client.query_points(
             collection_name=collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit,
             score_threshold=score_threshold,
             query_filter=search_filter,
@@ -498,7 +505,7 @@ class QdrantMemoryServer:
         )
         
         memories = []
-        for result in results:
+        for result in response.points:
             memories.append({
                 "id": result.id,
                 "score": result.score,
@@ -596,18 +603,19 @@ class QdrantMemoryServer:
                                  diversity_threshold: float, collection_name: str) -> Dict[str, Any]:
         """Find a diverse cluster of concepts around a query"""
         # Get initial candidates (more than needed)
-        initial_results = await self.client.search(
+        response = await self.client.query_points(
             collection_name=collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=cluster_size * 3,  # Get 3x more candidates
             with_payload=True,
             with_vectors=True
         )
         
-        if not initial_results:
+        if not response.points:
             return {"success": True, "cluster": [], "count": 0}
         
         # Select diverse cluster using simple greedy algorithm
+        initial_results = response.points
         cluster = [initial_results[0]]  # Start with most similar
         
         for candidate in initial_results[1:]:
@@ -965,16 +973,16 @@ class QdrantMemoryServer:
                 )
                 
                 # Get one sample to extract metadata
-                sample = await self.client.search(
+                response = await self.client.query_points(
                     collection_name=collection_name,
-                    query_vector=[0.0] * 384,  # Dummy vector
+                    query=[0.0] * 384,  # Dummy vector
                     query_filter=filter_condition,
                     limit=1,
                     with_payload=True
                 )
                 
-                if sample:
-                    payload = sample[0].payload
+                if response.points:
+                    payload = response.points[0].payload
                     document_info.append({
                         "file_path": doc_path,
                         "file_type": payload.get("file_type", "unknown"),
@@ -1042,9 +1050,9 @@ class QdrantMemoryServer:
                 )
             
             # Search
-            results = await self.client.search(
+            response = await self.client.query_points(
                 collection_name=collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=limit,
                 query_filter=search_filter,
                 with_payload=True
@@ -1052,7 +1060,7 @@ class QdrantMemoryServer:
             
             # Format results
             search_results = []
-            for result in results:
+            for result in response.points:
                 search_results.append({
                     "id": result.id,
                     "score": result.score,
