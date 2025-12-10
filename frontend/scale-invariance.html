@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elder's Scale Invariance - Fractal Consciousness</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2a 100%);
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .header {
+            padding: 12px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-bottom: 1px solid rgba(100, 150, 255, 0.3);
+        }
+        
+        .title { font-size: 18px; font-weight: 300; letter-spacing: 2px; color: #6699ff; }
+        .subtitle { font-size: 10px; color: rgba(255,255,255,0.5); }
+        
+        .container {
+            display: flex;
+            height: calc(100vh - 50px);
+            padding: 15px;
+            gap: 15px;
+        }
+        
+        .scales-panel { flex: 2; display: flex; flex-direction: column; gap: 10px; }
+        
+        .controls { 
+            display: flex; gap: 15px; padding: 10px; 
+            background: rgba(0,0,0,0.3); border-radius: 8px;
+            border: 1px solid rgba(100, 150, 255, 0.2);
+        }
+        
+        .control-group { flex: 1; }
+        .control-label { font-size: 9px; color: rgba(255,255,255,0.5); text-transform: uppercase; margin-bottom: 4px; }
+        
+        select { 
+            width: 100%; padding: 6px 10px; 
+            background: rgba(100, 150, 255, 0.1); border: 1px solid rgba(100, 150, 255, 0.3);
+            color: #fff; border-radius: 4px; font-size: 11px;
+        }
+        
+        .scale-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 10px;
+            min-height: 0;
+        }
+        
+        .scale-view {
+            background: rgba(0,0,0,0.4);
+            border-radius: 8px;
+            border: 1px solid rgba(100, 150, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+        
+        .scale-header {
+            padding: 8px 12px;
+            background: rgba(100, 150, 255, 0.1);
+            font-size: 11px;
+            color: #6699ff;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(100, 150, 255, 0.2);
+        }
+        
+        .scale-graph {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+            overflow: hidden;
+        }
+        
+        .scale-graph svg { width: 100%; height: 100%; }
+        
+        .analysis-panel { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        
+        .panel {
+            background: rgba(0,0,0,0.4);
+            border-radius: 8px;
+            border: 1px solid rgba(100, 150, 255, 0.2);
+            padding: 12px;
+        }
+        
+        .loglog-panel { flex: 2; display: flex; flex-direction: column; }
+        .metrics-panel { flex: 1; }
+        
+        .panel-title { 
+            font-size: 11px; color: #6699ff; text-transform: uppercase; 
+            letter-spacing: 1px; margin-bottom: 10px; 
+        }
+        
+        #loglog-svg { flex: 1; width: 100%; min-height: 200px; }
+        
+        .metric-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
+        .metric-label { color: rgba(255,255,255,0.6); }
+        .metric-value { color: #6699ff; font-weight: 600; }
+        
+        .dimension-box {
+            margin-top: 12px; padding: 12px;
+            background: rgba(100, 150, 255, 0.1);
+            border-radius: 6px; text-align: center;
+        }
+        
+        .dim-value { font-size: 32px; font-weight: 300; color: #6699ff; }
+        .dim-label { font-size: 9px; color: rgba(255,255,255,0.5); text-transform: uppercase; }
+        
+        .link { stroke: rgba(100, 150, 255, 0.4); stroke-width: 1.5px; }
+        .node circle { fill: #6699ff; stroke: #fff; stroke-width: 1.5px; }
+        .node.seed circle { fill: #ff6633; stroke: #fff; stroke-width: 2px; }
+        .node text { font-size: 8px; fill: rgba(255,255,255,0.7); }
+        
+        .axis { font-size: 10px; }
+        .axis path, .axis line { stroke: rgba(255,255,255,0.3); }
+        .axis text { fill: rgba(255,255,255,0.6); }
+        .fit-line { stroke: #ff6633; stroke-width: 2px; stroke-dasharray: 5,3; }
+        .data-point { fill: #6699ff; stroke: #fff; stroke-width: 2px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">SCALE INVARIANCE</div>
+        <div class="subtitle">Fractal Self-Similarity Across Network Scales</div>
+    </div>
+    
+    <div class="container">
+        <div class="scales-panel">
+            <div class="controls">
+                <div class="control-group">
+                    <div class="control-label">Seed Node</div>
+                    <select id="seed-select"><option value="">Select node...</option></select>
+                </div>
+            </div>
+            
+            <div class="scale-grid">
+                <div class="scale-view" data-radius="1">
+                    <div class="scale-header">
+                        <span>LOCAL (r=1)</span>
+                        <span id="stats-1">-</span>
+                    </div>
+                    <div class="scale-graph" id="graph-1"></div>
+                </div>
+                <div class="scale-view" data-radius="2">
+                    <div class="scale-header">
+                        <span>NEIGHBORHOOD (r=2)</span>
+                        <span id="stats-2">-</span>
+                    </div>
+                    <div class="scale-graph" id="graph-2"></div>
+                </div>
+                <div class="scale-view" data-radius="3">
+                    <div class="scale-header">
+                        <span>REGIONAL (r=3)</span>
+                        <span id="stats-3">-</span>
+                    </div>
+                    <div class="scale-graph" id="graph-3"></div>
+                </div>
+                <div class="scale-view" data-radius="full">
+                    <div class="scale-header">
+                        <span>GLOBAL (Full)</span>
+                        <span id="stats-full">-</span>
+                    </div>
+                    <div class="scale-graph" id="graph-full"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="analysis-panel">
+            <div class="panel loglog-panel">
+                <div class="panel-title">Log-Log Scaling Plot</div>
+                <svg id="loglog-svg"></svg>
+            </div>
+            
+            <div class="panel metrics-panel">
+                <div class="panel-title">Scale Metrics</div>
+                <div class="metric-row"><span class="metric-label">Nodes at r=1:</span><span class="metric-value" id="n1">-</span></div>
+                <div class="metric-row"><span class="metric-label">Nodes at r=2:</span><span class="metric-value" id="n2">-</span></div>
+                <div class="metric-row"><span class="metric-label">Nodes at r=3:</span><span class="metric-value" id="n3">-</span></div>
+                <div class="metric-row"><span class="metric-label">Total Nodes:</span><span class="metric-value" id="ntotal">-</span></div>
+                
+                <div class="dimension-box">
+                    <div class="dim-label">Estimated Dimension</div>
+                    <div class="dim-value" id="dimension">-</div>
+                    <div class="dim-label">R² = <span id="r-squared">-</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let fullGraph = { nodes: [], edges: [] };
+        let seedNode = null;
+        let scaleData = {};
+        
+        const socket = io('http://localhost:5000');
+        
+        socket.on('connect', () => console.log('Connected'));
+        
+        socket.on('graph_update', (data) => {
+            fullGraph.nodes = data.nodes || [];
+            fullGraph.edges = data.edges || [];
+            
+            // Populate selector
+            const sel = document.getElementById('seed-select');
+            sel.innerHTML = '<option value="">Select node...</option>' +
+                fullGraph.nodes.map(n => `<option value="${n.id}">${n.label || n.id}</option>`).join('');
+            
+            if (fullGraph.nodes.length > 0 && !seedNode) {
+                seedNode = fullGraph.nodes[0].id;
+                sel.value = seedNode;
+                renderAllScales();
+            }
+        });
+        
+        document.getElementById('seed-select').addEventListener('change', (e) => {
+            seedNode = e.target.value;
+            if (seedNode) renderAllScales();
+        });
+        
+        function buildAdj() {
+            const adj = new Map();
+            fullGraph.nodes.forEach(n => adj.set(n.id, new Set()));
+            fullGraph.edges.forEach(e => {
+                const src = typeof e.source === 'object' ? e.source.id : e.source;
+                const tgt = typeof e.target === 'object' ? e.target.id : e.target;
+                if (adj.has(src)) adj.get(src).add(tgt);
+                if (adj.has(tgt)) adj.get(tgt).add(src);
+            });
+            return adj;
+        }
+        
+        function extractSubgraph(radius) {
+            if (!seedNode) return { nodes: [], edges: [] };
+            const adj = buildAdj();
+            const visited = new Set([seedNode]);
+            const queue = [[seedNode, 0]];
+            
+            while (queue.length > 0) {
+                const [cur, dist] = queue.shift();
+                if (dist < radius) {
+                    for (const neighbor of (adj.get(cur) || [])) {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            queue.push([neighbor, dist + 1]);
+                        }
+                    }
+                }
+            }
+            
+            const nodes = fullGraph.nodes.filter(n => visited.has(n.id)).map(n => ({...n}));
+            const edges = fullGraph.edges.filter(e => {
+                const src = typeof e.source === 'object' ? e.source.id : e.source;
+                const tgt = typeof e.target === 'object' ? e.target.id : e.target;
+                return visited.has(src) && visited.has(tgt);
+            }).map(e => ({
+                source: typeof e.source === 'object' ? e.source.id : e.source,
+                target: typeof e.target === 'object' ? e.target.id : e.target,
+                strength: e.strength || 0.5
+            }));
+            
+            return { nodes, edges };
+        }
+        
+        function renderGraph(containerId, subgraph, radius) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            const rect = container.getBoundingClientRect();
+            const width = rect.width || 200;
+            const height = rect.height || 150;
+            
+            const svg = d3.select(container).append('svg')
+                .attr('width', width).attr('height', height);
+            
+            // Add zoom
+            const g = svg.append('g');
+            svg.call(d3.zoom().scaleExtent([0.3, 5]).on('zoom', (e) => g.attr('transform', e.transform)));
+            
+            if (subgraph.nodes.length === 0) {
+                svg.append('text').attr('x', width/2).attr('y', height/2)
+                   .attr('text-anchor', 'middle').attr('fill', 'rgba(255,255,255,0.3)')
+                   .text('No nodes');
+                return;
+            }
+            
+            const sim = d3.forceSimulation(subgraph.nodes)
+                .force('link', d3.forceLink(subgraph.edges).id(d => d.id).distance(40))
+                .force('charge', d3.forceManyBody().strength(-80))
+                .force('center', d3.forceCenter(width/2, height/2))
+                .force('collision', d3.forceCollide(12));
+            
+            const link = g.append('g').selectAll('line').data(subgraph.edges).join('line').attr('class', 'link');
+            
+            const node = g.append('g').selectAll('g').data(subgraph.nodes).join('g')
+                .attr('class', d => d.id === seedNode ? 'node seed' : 'node')
+                .call(d3.drag().on('start', (e,d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+                              .on('drag', (e,d) => { d.fx = e.x; d.fy = e.y; })
+                              .on('end', (e,d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+            
+            node.append('circle').attr('r', d => d.id === seedNode ? 8 : 5);
+            
+            sim.on('tick', () => {
+                link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+                node.attr('transform', d => `translate(${d.x},${d.y})`);
+            });
+            
+            // Store data
+            scaleData[radius] = { nodes: subgraph.nodes.length, edges: subgraph.edges.length };
+            document.getElementById(`stats-${radius === Infinity ? 'full' : radius}`).textContent = 
+                `${subgraph.nodes.length}n/${subgraph.edges.length}e`;
+        }
+        
+        function renderAllScales() {
+            [1, 2, 3].forEach(r => renderGraph(`graph-${r}`, extractSubgraph(r), r));
+            renderGraph('graph-full', { nodes: fullGraph.nodes.map(n => ({...n})), edges: fullGraph.edges.map(e => ({...e})) }, Infinity);
+            
+            // Update metrics
+            document.getElementById('n1').textContent = scaleData[1]?.nodes || 0;
+            document.getElementById('n2').textContent = scaleData[2]?.nodes || 0;
+            document.getElementById('n3').textContent = scaleData[3]?.nodes || 0;
+            document.getElementById('ntotal').textContent = fullGraph.nodes.length;
+            
+            renderLogLog();
+        }
+        
+        function renderLogLog() {
+            const svg = d3.select('#loglog-svg');
+            svg.selectAll('*').remove();
+            
+            const rect = svg.node().getBoundingClientRect();
+            const width = rect.width || 300;
+            const height = rect.height || 200;
+            const margin = { top: 20, right: 20, bottom: 35, left: 45 };
+            
+            const points = [1, 2, 3].map(r => ({ r, n: scaleData[r]?.nodes || 0 })).filter(d => d.n > 0);
+            
+            if (points.length < 2) {
+                svg.append('text').attr('x', width/2).attr('y', height/2)
+                   .attr('text-anchor', 'middle').attr('fill', 'rgba(255,255,255,0.4)')
+                   .text('Need more data');
+                document.getElementById('dimension').textContent = '-';
+                document.getElementById('r-squared').textContent = '-';
+                return;
+            }
+            
+            const xScale = d3.scaleLog().domain([0.8, 4]).range([margin.left, width - margin.right]);
+            const yMax = Math.max(...points.map(d => d.n)) * 1.5;
+            const yScale = d3.scaleLog().domain([1, yMax]).range([height - margin.bottom, margin.top]);
+            
+            // Axes
+            svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${height - margin.bottom})`)
+               .call(d3.axisBottom(xScale).ticks(3).tickFormat(d => d));
+            svg.append('g').attr('class', 'axis').attr('transform', `translate(${margin.left},0)`)
+               .call(d3.axisLeft(yScale).ticks(4));
+            
+            // Labels
+            svg.append('text').attr('x', width/2).attr('y', height - 5).attr('text-anchor', 'middle')
+               .attr('fill', 'rgba(255,255,255,0.5)').attr('font-size', '10px').text('Radius (log)');
+            svg.append('text').attr('transform', 'rotate(-90)').attr('x', -height/2).attr('y', 12)
+               .attr('text-anchor', 'middle').attr('fill', 'rgba(255,255,255,0.5)').attr('font-size', '10px').text('Nodes (log)');
+            
+            // Linear regression on log-log
+            const logPts = points.map(d => ({ x: Math.log(d.r), y: Math.log(d.n) }));
+            const n = logPts.length;
+            const sx = logPts.reduce((s, p) => s + p.x, 0);
+            const sy = logPts.reduce((s, p) => s + p.y, 0);
+            const sxy = logPts.reduce((s, p) => s + p.x * p.y, 0);
+            const sxx = logPts.reduce((s, p) => s + p.x * p.x, 0);
+            
+            const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+            const intercept = (sy - slope * sx) / n;
+            
+            // Fit line
+            const x1 = 0.8, x2 = 4;
+            const y1 = Math.exp(intercept + slope * Math.log(x1));
+            const y2 = Math.exp(intercept + slope * Math.log(x2));
+            
+            svg.append('line').attr('class', 'fit-line')
+               .attr('x1', xScale(x1)).attr('y1', yScale(Math.max(1, y1)))
+               .attr('x2', xScale(x2)).attr('y2', yScale(Math.min(yMax, y2)));
+            
+            // Data points
+            svg.selectAll('.data-point').data(points).join('circle')
+               .attr('class', 'data-point')
+               .attr('cx', d => xScale(d.r)).attr('cy', d => yScale(d.n)).attr('r', 6);
+            
+            // R-squared
+            const yMean = sy / n;
+            const ssTotal = logPts.reduce((s, p) => s + Math.pow(p.y - yMean, 2), 0);
+            const ssResid = logPts.reduce((s, p) => s + Math.pow(p.y - (intercept + slope * p.x), 2), 0);
+            const rSq = ssTotal > 0 ? 1 - ssResid / ssTotal : 0;
+            
+            document.getElementById('dimension').textContent = Math.abs(slope).toFixed(3);
+            document.getElementById('r-squared').textContent = (rSq * 100).toFixed(1) + '%';
+        }
+        
+        setTimeout(() => socket.emit('request_full_graph'), 500);
+        window.addEventListener('resize', () => { if (seedNode) renderAllScales(); });
+    </script>
+</body>
+</html>

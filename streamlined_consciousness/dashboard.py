@@ -49,12 +49,16 @@ class ConsciousnessDashboard:
         async def matrix(request):
             return web.Response(text=self.get_matrix_html(), content_type='text/html')
         
+        async def scale(request):
+            return web.Response(text=self.get_scale_html(), content_type='text/html')
+        
         self.app.router.add_get('/', index)
         self.app.router.add_get('/dashboard', dashboard_legacy)
         self.app.router.add_get('/galaxy', galaxy)
         self.app.router.add_get('/health', health)
         self.app.router.add_get('/heatmap', heatmap)
         self.app.router.add_get('/matrix', matrix)
+        self.app.router.add_get('/scale', scale)
         
         # Serve individual HTML files for the unified dashboard to load
         async def serve_html(request):
@@ -65,7 +69,8 @@ class ConsciousnessDashboard:
                 'consciousness-galaxy.html': 'get_galaxy_html',
                 'health.html': 'get_health_html',
                 'dimensional-heatmap.html': 'get_heatmap_html',
-                'distance-matrix.html': 'get_matrix_html'
+                'distance-matrix.html': 'get_matrix_html',
+                'scale-invariance.html': 'get_scale_html'
             }
             
             if filename in method_map:
@@ -1228,6 +1233,41 @@ class ConsciousnessDashboard:
     <h1>ELDER Distance Matrix</h1>
     <p class="error">Error loading matrix visualization: {e}</p>
     <p>Please ensure distance-matrix.html is in the frontend directory.</p>
+</body>
+</html>"""
+    
+    def get_scale_html(self):
+        """Return the Scale Invariance visualization HTML as a string"""
+        try:
+            # Look for HTML file in multiple locations
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '..', 'frontend', 'scale-invariance.html'),
+                os.path.join(os.path.dirname(__file__), 'scale-invariance.html'),
+                'frontend/scale-invariance.html'
+            ]
+            
+            for html_path in possible_paths:
+                if os.path.exists(html_path):
+                    with open(html_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+            
+            raise FileNotFoundError("scale-invariance.html not found in any expected location")
+            
+        except Exception as e:
+            logger.error(f"Error reading Scale Invariance HTML file: {e}")
+            return f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>ELDER Scale Invariance</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 50px; }}
+        .error {{ color: red; }}
+    </style>
+</head>
+<body>
+    <h1>ELDER Scale Invariance</h1>
+    <p class="error">Error loading scale invariance visualization: {e}</p>
+    <p>Please ensure scale-invariance.html is in the frontend directory.</p>
 </body>
 </html>"""
     
