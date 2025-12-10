@@ -43,10 +43,18 @@ class ConsciousnessDashboard:
         async def health(request):
             return web.Response(text=self.get_health_html(), content_type='text/html')
         
+        async def heatmap(request):
+            return web.Response(text=self.get_heatmap_html(), content_type='text/html')
+        
+        async def matrix(request):
+            return web.Response(text=self.get_matrix_html(), content_type='text/html')
+        
         self.app.router.add_get('/', index)
         self.app.router.add_get('/dashboard', dashboard_legacy)
         self.app.router.add_get('/galaxy', galaxy)
         self.app.router.add_get('/health', health)
+        self.app.router.add_get('/heatmap', heatmap)
+        self.app.router.add_get('/matrix', matrix)
         
         # Serve individual HTML files for the unified dashboard to load
         async def serve_html(request):
@@ -55,7 +63,9 @@ class ConsciousnessDashboard:
             method_map = {
                 'consciousness-dashboard.html': 'get_hud_html',
                 'consciousness-galaxy.html': 'get_galaxy_html',
-                'health.html': 'get_health_html'
+                'health.html': 'get_health_html',
+                'dimensional-heatmap.html': 'get_heatmap_html',
+                'distance-matrix.html': 'get_matrix_html'
             }
             
             if filename in method_map:
@@ -291,6 +301,18 @@ class ConsciousnessDashboard:
                                 'avg_weight': stats.get('avg_semantic_weight', 0.0)
                             }
                             logger.info(f"Extracted Neo4j stats: {neo4j_stats}")
+                            
+                            # If no semantic relationships found, query ALL relationship types
+                            if neo4j_stats['edge_count'] == 0:
+                                all_edges_query = """
+                                MATCH (:Concept)-[r]-(:Concept)
+                                RETURN count(r)/2 as edge_count
+                                """
+                                edge_result = await self._query_neo4j_directly(all_edges_query)
+                                if edge_result and edge_result.get('records'):
+                                    total_edges = edge_result['records'][0].get('edge_count', 0)
+                                    neo4j_stats['edge_count'] = total_edges
+                                    logger.info(f"Found {total_edges} total edges (all relationship types)")
                         else:
                             logger.warning("Stats tool returned success=false")
                             neo4j_stats = {
@@ -450,54 +472,46 @@ class ConsciousnessDashboard:
                 
                 health_data['docker'] = docker_data
                 
-                # 4. Vector Memory (Qdrant) stats
+                # 4. Vector Memory (Qdrant) stats - Always use direct client for reliability
                 qdrant_data = {}
                 try:
-                    # Find qdrant collection info tool
-                    qdrant_tool = None
-                    for category in self.consciousness.tool_categories.values():
-                        for tool in category.tools:
-                            if 'qdrant' in tool.name and 'collection_info' in tool.name:
-                                qdrant_tool = tool
-                                break
-                        if qdrant_tool:
-                            break
+                    from qdrant_client import QdrantClient
+                    client = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
                     
-                    if qdrant_tool:
-                        info_result = await asyncio.to_thread(qdrant_tool._run, collection_name="memory")
-                        if isinstance(info_result, str):
-                            info = json.loads(info_result)
-                        else:
-                            info = info_result
-                        
-                        qdrant_data = {
-                            'collection_count': 1,  # We use one collection named "memory"
-                            'memory_count': info.get('vectors_count', 0),
-                            'embedding_dim': info.get('config', {}).get('params', {}).get('vectors', {}).get('size', 384)
-                        }
-                    else:
-                        # Direct API call to Qdrant
-                        from qdrant_client import QdrantClient
-                        client = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
-                        collections = await asyncio.to_thread(client.get_collections)
-                        collection_count = len(collections.collections)
-                        
+                    # Get ALL collections
+                    collections = await asyncio.to_thread(client.get_collections)
+                    collection_count = len(collections.collections)
+                    
+                    logger.info(f"Qdrant collections found: {[c.name for c in collections.collections]}")
+                    
+                    # Sum up points from all collections
+                    total_points = 0
+                    embedding_dim = 384
+                    
+                    for collection in collections.collections:
                         try:
-                            info = await asyncio.to_thread(client.get_collection, "memory")
-                            qdrant_data = {
-                                'collection_count': collection_count,
-                                'memory_count': info.vectors_count,
-                                'embedding_dim': info.config.params.vectors.size
-                            }
-                        except:
-                            qdrant_data = {
-                                'collection_count': collection_count,
-                                'memory_count': 0,
-                                'embedding_dim': 384
-                            }
+                            info = await asyncio.to_thread(client.get_collection, collection.name)
+                            points = info.points_count if info.points_count else 0
+                            total_points += points
+                            logger.info(f"  Collection '{collection.name}': {points} points")
+                            
+                            # Get embedding dimension from first collection that has it
+                            if embedding_dim == 384 and hasattr(info.config, 'params') and hasattr(info.config.params, 'vectors'):
+                                if hasattr(info.config.params.vectors, 'size'):
+                                    embedding_dim = info.config.params.vectors.size
+                        except Exception as e:
+                            logger.warning(f"  Failed to get info for collection '{collection.name}': {e}")
+                    
+                    qdrant_data = {
+                        'collection_count': collection_count,
+                        'memory_count': total_points,
+                        'embedding_dim': embedding_dim
+                    }
+                    logger.info(f"Qdrant stats: {collection_count} collections, {total_points} total memories")
+                    
                 except Exception as e:
                     logger.error(f"Error getting Qdrant stats: {e}")
-                    qdrant_data = {'error': str(e)}
+                    qdrant_data = {'error': str(e), 'collection_count': 0, 'memory_count': 0, 'embedding_dim': 384}
                 
                 health_data['qdrant'] = qdrant_data
                 
@@ -1144,6 +1158,76 @@ class ConsciousnessDashboard:
     <h1>ELDER System Health</h1>
     <p class="error">Error loading health monitoring: {e}</p>
     <p>Please ensure health.html is in the frontend directory.</p>
+</body>
+</html>"""
+    
+    def get_heatmap_html(self):
+        """Return the Dimensional Heatmap visualization HTML as a string"""
+        try:
+            # Look for HTML file in multiple locations
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dimensional-heatmap.html'),
+                os.path.join(os.path.dirname(__file__), 'dimensional-heatmap.html'),
+                'frontend/dimensional-heatmap.html'
+            ]
+            
+            for html_path in possible_paths:
+                if os.path.exists(html_path):
+                    with open(html_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+            
+            raise FileNotFoundError("dimensional-heatmap.html not found in any expected location")
+            
+        except Exception as e:
+            logger.error(f"Error reading Heatmap HTML file: {e}")
+            return f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>ELDER Dimensional Heatmap</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 50px; }}
+        .error {{ color: red; }}
+    </style>
+</head>
+<body>
+    <h1>ELDER Dimensional Heatmap</h1>
+    <p class="error">Error loading heatmap visualization: {e}</p>
+    <p>Please ensure dimensional-heatmap.html is in the frontend directory.</p>
+</body>
+</html>"""
+    
+    def get_matrix_html(self):
+        """Return the Distance Matrix visualization HTML as a string"""
+        try:
+            # Look for HTML file in multiple locations
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '..', 'frontend', 'distance-matrix.html'),
+                os.path.join(os.path.dirname(__file__), 'distance-matrix.html'),
+                'frontend/distance-matrix.html'
+            ]
+            
+            for html_path in possible_paths:
+                if os.path.exists(html_path):
+                    with open(html_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+            
+            raise FileNotFoundError("distance-matrix.html not found in any expected location")
+            
+        except Exception as e:
+            logger.error(f"Error reading Matrix HTML file: {e}")
+            return f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>ELDER Distance Matrix</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 50px; }}
+        .error {{ color: red; }}
+    </style>
+</head>
+<body>
+    <h1>ELDER Distance Matrix</h1>
+    <p class="error">Error loading matrix visualization: {e}</p>
+    <p>Please ensure distance-matrix.html is in the frontend directory.</p>
 </body>
 </html>"""
     

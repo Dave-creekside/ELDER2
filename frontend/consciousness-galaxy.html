@@ -253,8 +253,8 @@
             
             // Camera setup
             const aspect = window.innerWidth / window.innerHeight;
-            camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
-            camera.position.set(0, 50, 150);  // Much further back to see whole graph
+            camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 3000);
+            camera.position.set(0, 240, 700);  // Very far back to see entire growing galaxy
             
             // Renderer setup
             renderer = new THREE.WebGLRenderer({ 
@@ -271,8 +271,8 @@
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
-            controls.minDistance = 20;
-            controls.maxDistance = 300;
+            controls.minDistance = 50;
+            controls.maxDistance = 1200;
             controls.autoRotate = CONFIG.rotation.autoRotate;
             controls.autoRotateSpeed = 0.5;
             
@@ -381,10 +381,10 @@
             const material = new THREE.MeshPhongMaterial({
                 color: color,
                 emissive: color,
-                emissiveIntensity: 0.5,
-                shininess: 100,
+                emissiveIntensity: 0.8,
+                shininess: 150,
                 transparent: true,
-                opacity: 0.9
+                opacity: 0.95
             });
             
             const mesh = new THREE.Mesh(geometry, material);
@@ -416,16 +416,26 @@
                 connections: new Set()
             };
             
-            // Add glow
-            const glowGeometry = new THREE.SphereGeometry(size * 1.5, 16, 16);
+            // Add outer glow corona
+            const glowGeometry = new THREE.SphereGeometry(size * 2.0, 16, 16);
             const glowMaterial = new THREE.MeshBasicMaterial({
                 color: color,
                 transparent: true,
-                opacity: 0.1,
+                opacity: 0.15,
                 side: THREE.BackSide
             });
             const glow = new THREE.Mesh(glowGeometry, glowMaterial);
             mesh.add(glow);
+            
+            // Add inner highlight
+            const innerGeometry = new THREE.SphereGeometry(size * 0.4, 12, 12);
+            const innerMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.5
+            });
+            const inner = new THREE.Mesh(innerGeometry, innerMaterial);
+            mesh.add(inner);
             
             nodeGroup.add(mesh);
             nodes.set(id, mesh);
@@ -459,16 +469,17 @@
             const material = new THREE.MeshBasicMaterial({
                 color: color,
                 emissive: color,
-                emissiveIntensity: 2.0,
-                opacity: 1.0,  // Full opacity
+                emissiveIntensity: 3.0,
+                opacity: 1.0,
                 transparent: false,
                 blending: THREE.AdditiveBlending
             });
             
-            // Use cylinder geometry for thick glowing edges
+            // Use cylinder geometry for thick glowing edges - thicker radius
             const direction = new THREE.Vector3().subVectors(targetNode.position, sourceNode.position);
             const distance = direction.length();
-            const cylinderGeometry = new THREE.CylinderGeometry(0.5, 0.5, distance, 8);
+            const edgeThickness = 0.3 + (strength * 0.5);  // Vary thickness with strength
+            const cylinderGeometry = new THREE.CylinderGeometry(edgeThickness, edgeThickness, distance, 8);
             
             const line = new THREE.Mesh(cylinderGeometry, material);
             
@@ -501,13 +512,13 @@
             const particles = [];
             
             for (let i = 0; i < particleCount; i++) {
-                const particleGeometry = new THREE.SphereGeometry(0.8, 8, 8);  // Larger particles
+                const particleGeometry = new THREE.SphereGeometry(1.2, 12, 12);  // Even larger particles
                 const particleMaterial = new THREE.MeshBasicMaterial({
-                    color: 0x00ffff,  // Bright cyan for all particles
-                    emissive: 0x00ffff,
-                    emissiveIntensity: 2,  // Super bright
+                    color: color || 0x00ffff,  // Use edge color
+                    emissive: color || 0x00ffff,
+                    emissiveIntensity: 3,  // Super bright
                     transparent: true,
-                    opacity: 0.9
+                    opacity: 1.0
                 });
                 
                 const particle = new THREE.Mesh(particleGeometry, particleMaterial);
@@ -515,7 +526,7 @@
                     source,
                     target,
                     progress: i / particleCount,
-                    speed: 0.005 + Math.random() * 0.005
+                    speed: 0.008 + Math.random() * 0.006  // Faster flow
                 };
                 
                 particleGroup.add(particle);

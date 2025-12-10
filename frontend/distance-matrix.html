@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elder's Distance Matrix - Semantic Proximity</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: 
+                radial-gradient(ellipse at 20% 30%, rgba(0, 30, 60, 0.8) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(40, 0, 60, 0.6) 0%, transparent 50%),
+                linear-gradient(180deg, #050a15 0%, #0a0510 100%);
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 15px 25px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .title {
+            font-size: 20px;
+            font-weight: 200;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 0 20px rgba(100, 150, 255, 0.5);
+        }
+        
+        .subtitle {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 3px;
+            letter-spacing: 1px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .control-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.8);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(100, 150, 255, 0.5);
+        }
+        
+        .control-btn.active {
+            background: rgba(100, 150, 255, 0.3);
+            border-color: rgba(100, 150, 255, 0.6);
+        }
+        
+        .metrics {
+            text-align: right;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .metric-value {
+            color: #6699ff;
+            font-weight: 600;
+        }
+        
+        /* Main container */
+        .container {
+            padding: 80px 20px 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Matrix wrapper */
+        .matrix-wrapper {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            overflow: hidden;
+        }
+        
+        .matrix-container {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Matrix canvas */
+        #matrix-canvas {
+            display: block;
+        }
+        
+        /* Labels */
+        .row-labels, .col-labels {
+            position: absolute;
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        /* Info panel */
+        .info-panel {
+            width: 280px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .panel-section {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 6px;
+        }
+        
+        .panel-title {
+            font-size: 11px;
+            font-weight: 500;
+            color: #6699ff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        
+        .cell-info {
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        
+        .cell-info .label {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .cell-info .value {
+            color: #fff;
+            font-weight: 500;
+        }
+        
+        .cell-info .distance {
+            font-size: 24px;
+            font-weight: 300;
+            color: #6699ff;
+            margin: 10px 0;
+        }
+        
+        /* Legend */
+        .legend {
+            margin-top: auto;
+        }
+        
+        .legend-gradient {
+            height: 15px;
+            border-radius: 3px;
+            background: linear-gradient(90deg, 
+                #ff6633 0%, 
+                #ff9933 25%, 
+                #ffcc66 50%, 
+                #99ccff 75%, 
+                #3366ff 100%
+            );
+            margin-bottom: 5px;
+        }
+        
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Loading state */
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(100, 150, 255, 0.2);
+            border-top-color: #6699ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 12px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Tooltip */
+        .tooltip {
+            position: fixed;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid rgba(100, 150, 255, 0.5);
+            border-radius: 4px;
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.15s;
+            max-width: 200px;
+        }
+        
+        .tooltip.visible {
+            opacity: 1;
+        }
+        
+        .tooltip-title {
+            font-weight: 600;
+            color: #6699ff;
+            margin-bottom: 4px;
+        }
+        
+        .tooltip-content {
+            color: rgba(255, 255, 255, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <div class="title">Distance Matrix</div>
+            <div class="subtitle">Semantic Proximity Between Concepts</div>
+        </div>
+        <div class="controls">
+            <button class="control-btn active" id="sort-importance">By Importance</button>
+            <button class="control-btn" id="sort-alpha">Alphabetical</button>
+        </div>
+        <div class="metrics">
+            <div>Nodes: <span class="metric-value" id="node-count">0</span></div>
+            <div>Avg Distance: <span class="metric-value" id="avg-distance">-</span></div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="matrix-wrapper">
+            <div class="matrix-container" id="matrix-container">
+                <canvas id="matrix-canvas"></canvas>
+                <div class="loading" id="loading">
+                    <div class="loading-spinner"></div>
+                    <div>Computing distances...</div>
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <div class="panel-section">
+                    <div class="panel-title">Selected Cell</div>
+                    <div class="cell-info" id="cell-info">
+                        <div><span class="label">From:</span> <span class="value" id="from-node">-</span></div>
+                        <div><span class="label">To:</span> <span class="value" id="to-node">-</span></div>
+                        <div class="distance" id="distance-value">-</div>
+                        <div><span class="label">Path Length:</span> <span class="value" id="path-length">-</span></div>
+                    </div>
+                </div>
+                
+                <div class="panel-section">
+                    <div class="panel-title">Statistics</div>
+                    <div class="cell-info">
+                        <div><span class="label">Min Distance:</span> <span class="value" id="min-dist">-</span></div>
+                        <div><span class="label">Max Distance:</span> <span class="value" id="max-dist">-</span></div>
+                        <div><span class="label">Diameter:</span> <span class="value" id="diameter">-</span></div>
+                        <div><span class="label">Density:</span> <span class="value" id="density">-</span></div>
+                    </div>
+                </div>
+                
+                <div class="panel-section legend">
+                    <div class="panel-title">Distance Scale</div>
+                    <div class="legend-gradient"></div>
+                    <div class="legend-labels">
+                        <span>Close (0)</span>
+                        <span>Far (∞)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tooltip" id="tooltip">
+        <div class="tooltip-title" id="tooltip-title"></div>
+        <div class="tooltip-content" id="tooltip-content"></div>
+    </div>
+
+    <script>
+        // Data structures
+        let nodes = [];
+        let edges = [];
+        let distanceMatrix = [];
+        let sortMode = 'importance';
+        
+        // Canvas setup
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('matrix-container');
+        
+        // Cell size
+        const CELL_SIZE = 25;
+        const LABEL_WIDTH = 100;
+        const LABEL_HEIGHT = 80;
+        
+        // Color interpolation for distance
+        function getDistanceColor(distance, maxDist) {
+            if (distance === Infinity || distance === null) {
+                return 'rgba(30, 30, 50, 0.8)'; // Unreachable
+            }
+            
+            const t = Math.min(distance / maxDist, 1);
+            
+            // Hot (close) to cool (far) gradient
+            const colors = [
+                { pos: 0.0, r: 255, g: 102, b: 51 },   // Hot orange (close)
+                { pos: 0.3, r: 255, g: 153, b: 51 },   // Orange
+                { pos: 0.5, r: 255, g: 204, b: 102 },  // Yellow
+                { pos: 0.7, r: 153, g: 204, b: 255 },  // Light blue
+                { pos: 1.0, r: 51, g: 102, b: 255 }    // Deep blue (far)
+            ];
+            
+            let c1 = colors[0], c2 = colors[colors.length - 1];
+            for (let i = 0; i < colors.length - 1; i++) {
+                if (t >= colors[i].pos && t <= colors[i + 1].pos) {
+                    c1 = colors[i];
+                    c2 = colors[i + 1];
+                    break;
+                }
+            }
+            
+            const localT = (t - c1.pos) / (c2.pos - c1.pos);
+            const r = Math.round(c1.r + localT * (c2.r - c1.r));
+            const g = Math.round(c1.g + localT * (c2.g - c1.g));
+            const b = Math.round(c1.b + localT * (c2.b - c1.b));
+            
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+        
+        // Build adjacency list from edges
+        function buildAdjacencyList() {
+            const adj = new Map();
+            
+            nodes.forEach(node => {
+                adj.set(node.id, []);
+            });
+            
+            edges.forEach(edge => {
+                if (adj.has(edge.source) && adj.has(edge.target)) {
+                    adj.get(edge.source).push({
+                        node: edge.target,
+                        weight: edge.strength || 0.5
+                    });
+                    adj.get(edge.target).push({
+                        node: edge.source,
+                        weight: edge.strength || 0.5
+                    });
+                }
+            });
+            
+            return adj;
+        }
+        
+        // BFS shortest path (unweighted)
+        function bfsShortestPath(adj, startId) {
+            const distances = new Map();
+            const queue = [startId];
+            distances.set(startId, 0);
+            
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const currentDist = distances.get(current);
+                
+                const neighbors = adj.get(current) || [];
+                for (const neighbor of neighbors) {
+                    if (!distances.has(neighbor.node)) {
+                        distances.set(neighbor.node, currentDist + 1);
+                        queue.push(neighbor.node);
+                    }
+                }
+            }
+            
+            return distances;
+        }
+        
+        // Compute full distance matrix
+        function computeDistanceMatrix() {
+            const adj = buildAdjacencyList();
+            const n = nodes.length;
+            distanceMatrix = [];
+            
+            let maxDist = 0;
+            let totalDist = 0;
+            let pairCount = 0;
+            
+            for (let i = 0; i < n; i++) {
+                const distances = bfsShortestPath(adj, nodes[i].id);
+                const row = [];
+                
+                for (let j = 0; j < n; j++) {
+                    const dist = distances.get(nodes[j].id);
+                    const d = dist !== undefined ? dist : Infinity;
+                    row.push(d);
+                    
+                    if (d !== Infinity && d > 0) {
+                        maxDist = Math.max(maxDist, d);
+                        totalDist += d;
+                        pairCount++;
+                    }
+                }
+                
+                distanceMatrix.push(row);
+            }
+            
+            // Update statistics
+            const avgDist = pairCount > 0 ? (totalDist / pairCount).toFixed(2) : '-';
+            document.getElementById('avg-distance').textContent = avgDist;
+            document.getElementById('min-dist').textContent = '0';
+            document.getElementById('max-dist').textContent = maxDist === 0 ? '-' : maxDist;
+            document.getElementById('diameter').textContent = maxDist === 0 ? '-' : maxDist;
+            
+            // Calculate density
+            const maxEdges = (n * (n - 1)) / 2;
+            const density = maxEdges > 0 ? ((edges.length / maxEdges) * 100).toFixed(1) + '%' : '-';
+            document.getElementById('density').textContent = density;
+            
+            return maxDist;
+        }
+        
+        // Sort nodes
+        function sortNodes() {
+            if (sortMode === 'importance') {
+                nodes.sort((a, b) => (b.importance || 5) - (a.importance || 5));
+            } else {
+                nodes.sort((a, b) => (a.label || a.id).localeCompare(b.label || b.id));
+            }
+        }
+        
+        // Render the matrix
+        function renderMatrix() {
+            const n = nodes.length;
+            
+            if (n === 0) {
+                document.getElementById('loading').style.display = 'flex';
+                return;
+            }
+            
+            document.getElementById('loading').style.display = 'none';
+            
+            sortNodes();
+            const maxDist = computeDistanceMatrix();
+            
+            // Set canvas size
+            const width = LABEL_WIDTH + n * CELL_SIZE;
+            const height = LABEL_HEIGHT + n * CELL_SIZE;
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Clear
+            ctx.fillStyle = 'rgba(5, 10, 20, 1)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw cells
+            for (let i = 0; i < n; i++) {
+                for (let j = 0; j < n; j++) {
+                    const dist = distanceMatrix[i][j];
+                    const x = LABEL_WIDTH + j * CELL_SIZE;
+                    const y = LABEL_HEIGHT + i * CELL_SIZE;
+                    
+                    ctx.fillStyle = getDistanceColor(dist, maxDist || 1);
+                    ctx.fillRect(x, y, CELL_SIZE - 1, CELL_SIZE - 1);
+                    
+                    // Diagonal highlight
+                    if (i === j) {
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x, y, CELL_SIZE - 1, CELL_SIZE - 1);
+                    }
+                }
+            }
+            
+            // Draw row labels (left side)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.font = '9px system-ui';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            
+            for (let i = 0; i < n; i++) {
+                const label = (nodes[i].label || nodes[i].id).substring(0, 12);
+                const y = LABEL_HEIGHT + i * CELL_SIZE + CELL_SIZE / 2;
+                ctx.fillText(label, LABEL_WIDTH - 5, y);
+            }
+            
+            // Draw column labels (top)
+            ctx.save();
+            ctx.textAlign = 'left';
+            
+            for (let j = 0; j < n; j++) {
+                const label = (nodes[j].label || nodes[j].id).substring(0, 12);
+                const x = LABEL_WIDTH + j * CELL_SIZE + CELL_SIZE / 2;
+                
+                ctx.save();
+                ctx.translate(x, LABEL_HEIGHT - 5);
+                ctx.rotate(-Math.PI / 4);
+                ctx.fillText(label, 0, 0);
+                ctx.restore();
+            }
+            
+            ctx.restore();
+            
+            // Update node count
+            document.getElementById('node-count').textContent = n;
+        }
+        
+        // Mouse interaction
+        let hoveredCell = null;
+        
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Check if over a cell
+            const col = Math.floor((x - LABEL_WIDTH) / CELL_SIZE);
+            const row = Math.floor((y - LABEL_HEIGHT) / CELL_SIZE);
+            
+            if (col >= 0 && col < nodes.length && row >= 0 && row < nodes.length) {
+                const fromNode = nodes[row];
+                const toNode = nodes[col];
+                const dist = distanceMatrix[row][col];
+                
+                // Show tooltip
+                const tooltip = document.getElementById('tooltip');
+                document.getElementById('tooltip-title').textContent = 
+                    `${fromNode.label || fromNode.id} → ${toNode.label || toNode.id}`;
+                document.getElementById('tooltip-content').textContent = 
+                    dist === Infinity ? 'Unreachable' : `Distance: ${dist}`;
+                
+                tooltip.style.left = (e.clientX + 15) + 'px';
+                tooltip.style.top = (e.clientY - 10) + 'px';
+                tooltip.classList.add('visible');
+                
+                hoveredCell = { row, col };
+            } else {
+                document.getElementById('tooltip').classList.remove('visible');
+                hoveredCell = null;
+            }
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            document.getElementById('tooltip').classList.remove('visible');
+            hoveredCell = null;
+        });
+        
+        canvas.addEventListener('click', (e) => {
+            if (hoveredCell) {
+                const fromNode = nodes[hoveredCell.row];
+                const toNode = nodes[hoveredCell.col];
+                const dist = distanceMatrix[hoveredCell.row][hoveredCell.col];
+                
+                document.getElementById('from-node').textContent = fromNode.label || fromNode.id;
+                document.getElementById('to-node').textContent = toNode.label || toNode.id;
+                document.getElementById('distance-value').textContent = 
+                    dist === Infinity ? '∞' : dist;
+                document.getElementById('path-length').textContent = 
+                    dist === Infinity ? '-' : dist + ' hops';
+            }
+        });
+        
+        // Sort buttons
+        document.getElementById('sort-importance').addEventListener('click', () => {
+            sortMode = 'importance';
+            document.getElementById('sort-importance').classList.add('active');
+            document.getElementById('sort-alpha').classList.remove('active');
+            renderMatrix();
+        });
+        
+        document.getElementById('sort-alpha').addEventListener('click', () => {
+            sortMode = 'alpha';
+            document.getElementById('sort-alpha').classList.add('active');
+            document.getElementById('sort-importance').classList.remove('active');
+            renderMatrix();
+        });
+        
+        // WebSocket connection
+        const socket = io('http://localhost:5000');
+        
+        socket.on('connect', () => {
+            console.log('Connected to Elder Consciousness');
+        });
+        
+        socket.on('graph_update', (data) => {
+            console.log('Graph update received:', data);
+            
+            // Update nodes
+            if (data.nodes) {
+                nodes = data.nodes;
+            }
+            
+            // Update edges
+            if (data.edges) {
+                edges = data.edges;
+            }
+            
+            // Re-render matrix
+            renderMatrix();
+        });
+        
+        // Request initial data
+        setTimeout(() => {
+            socket.emit('request_full_graph');
+        }, 500);
+        
+        // Handle window resize
+        window.addEventListener('resize', renderMatrix);
+    </script>
+</body>
+</html>

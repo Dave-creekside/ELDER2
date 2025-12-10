@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elder's Dimensional Heatmap - Consciousness Complexity</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: 
+                radial-gradient(ellipse at 30% 20%, rgba(20, 0, 50, 0.8) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(50, 0, 20, 0.6) 0%, transparent 50%),
+                linear-gradient(180deg, #0a0a15 0%, #050510 100%);
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 30px;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .title {
+            font-size: 22px;
+            font-weight: 200;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 0 20px rgba(255, 100, 50, 0.5);
+        }
+        
+        .subtitle {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+            letter-spacing: 1px;
+        }
+        
+        .metrics {
+            text-align: right;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .metric-value {
+            color: #ff6633;
+            font-weight: 600;
+        }
+        
+        /* Main container */
+        .container {
+            padding: 100px 30px 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        /* Heatmap grid */
+        .heatmap-container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .heatmap-grid {
+            flex: 1;
+            min-width: 600px;
+            display: grid;
+            gap: 3px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .heatmap-cell {
+            aspect-ratio: 1;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            min-width: 20px;
+            min-height: 20px;
+        }
+        
+        .heatmap-cell:hover {
+            transform: scale(1.2);
+            z-index: 10;
+            box-shadow: 0 0 20px currentColor;
+        }
+        
+        .heatmap-cell::after {
+            content: attr(data-label);
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
+            white-space: nowrap;
+            color: rgba(255, 255, 255, 0.8);
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 1);
+        }
+        
+        .heatmap-cell:hover::after {
+            opacity: 1;
+        }
+        
+        /* Info panel */
+        .info-panel {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+        }
+        
+        .info-title {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 15px;
+            color: #ff6633;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .node-info {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .node-name {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+        
+        .node-stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .node-stat:last-child {
+            border-bottom: none;
+        }
+        
+        .stat-label {
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .stat-value {
+            color: #ff6633;
+            font-weight: 500;
+        }
+        
+        /* Color scale legend */
+        .legend {
+            margin-top: 20px;
+        }
+        
+        .legend-title {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .legend-gradient {
+            height: 20px;
+            border-radius: 4px;
+            background: linear-gradient(90deg, 
+                #1a0a2e 0%, 
+                #2d1b4e 20%, 
+                #5c3d7a 40%, 
+                #ff6633 60%, 
+                #ff9933 80%, 
+                #ffcc00 100%
+            );
+        }
+        
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 5px;
+        }
+        
+        /* Loading state */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 400px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 2px solid rgba(255, 102, 51, 0.2);
+            border-top-color: #ff6633;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Tooltip */
+        .tooltip {
+            position: fixed;
+            padding: 10px 15px;
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid rgba(255, 102, 51, 0.5);
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.2s;
+            max-width: 250px;
+        }
+        
+        .tooltip.visible {
+            opacity: 1;
+        }
+        
+        .tooltip-name {
+            font-weight: 600;
+            color: #ff6633;
+            margin-bottom: 5px;
+        }
+        
+        .tooltip-stats {
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <div class="title">Dimensional Heatmap</div>
+            <div class="subtitle">Consciousness Complexity Visualization</div>
+        </div>
+        <div class="metrics">
+            <div>Nodes: <span class="metric-value" id="node-count">0</span></div>
+            <div>Avg Connectivity: <span class="metric-value" id="avg-connectivity">0.00</span></div>
+            <div>Max Connections: <span class="metric-value" id="max-connections">0</span></div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="heatmap-container">
+            <div class="heatmap-grid" id="heatmap">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div>Loading consciousness data...</div>
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <div class="info-title">Selected Node</div>
+                <div class="node-info" id="node-info">
+                    <div class="node-name" id="selected-name">Hover over a cell</div>
+                    <div class="node-stat">
+                        <span class="stat-label">Connections</span>
+                        <span class="stat-value" id="selected-connections">-</span>
+                    </div>
+                    <div class="node-stat">
+                        <span class="stat-label">Heat Score</span>
+                        <span class="stat-value" id="selected-heat">-</span>
+                    </div>
+                    <div class="node-stat">
+                        <span class="stat-label">Importance</span>
+                        <span class="stat-value" id="selected-importance">-</span>
+                    </div>
+                    <div class="node-stat">
+                        <span class="stat-label">Avg Edge Weight</span>
+                        <span class="stat-value" id="selected-weight">-</span>
+                    </div>
+                </div>
+                
+                <div class="legend">
+                    <div class="legend-title">Heat Scale (Connection Density)</div>
+                    <div class="legend-gradient"></div>
+                    <div class="legend-labels">
+                        <span>Low</span>
+                        <span>Medium</span>
+                        <span>High</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tooltip" id="tooltip">
+        <div class="tooltip-name" id="tooltip-name"></div>
+        <div class="tooltip-stats" id="tooltip-stats"></div>
+    </div>
+
+    <script>
+        // Data structures
+        let nodes = new Map();
+        let edges = [];
+        let nodeMetrics = new Map();
+        
+        // Color interpolation for heatmap
+        function getHeatColor(value) {
+            // Value from 0 to 1
+            const v = Math.max(0, Math.min(1, value));
+            
+            // Color stops: dark purple -> purple -> orange -> yellow
+            const colors = [
+                { pos: 0.0, r: 26, g: 10, b: 46 },    // Dark purple
+                { pos: 0.3, r: 92, g: 61, b: 122 },   // Purple
+                { pos: 0.5, r: 180, g: 80, b: 80 },   // Red-ish
+                { pos: 0.7, r: 255, g: 102, b: 51 },  // Orange
+                { pos: 1.0, r: 255, g: 204, b: 0 }    // Yellow/Gold
+            ];
+            
+            // Find the two colors to interpolate between
+            let c1 = colors[0], c2 = colors[colors.length - 1];
+            for (let i = 0; i < colors.length - 1; i++) {
+                if (v >= colors[i].pos && v <= colors[i + 1].pos) {
+                    c1 = colors[i];
+                    c2 = colors[i + 1];
+                    break;
+                }
+            }
+            
+            // Interpolate
+            const t = (v - c1.pos) / (c2.pos - c1.pos);
+            const r = Math.round(c1.r + t * (c2.r - c1.r));
+            const g = Math.round(c1.g + t * (c2.g - c1.g));
+            const b = Math.round(c1.b + t * (c2.b - c1.b));
+            
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+        
+        // Calculate metrics for each node
+        function calculateNodeMetrics() {
+            nodeMetrics.clear();
+            
+            nodes.forEach((nodeData, nodeId) => {
+                // Count connections
+                let connectionCount = 0;
+                let totalWeight = 0;
+                let connectedNodes = [];
+                
+                edges.forEach(edge => {
+                    if (edge.source === nodeId || edge.target === nodeId) {
+                        connectionCount++;
+                        totalWeight += edge.strength || edge.weight || 0.5;
+                        connectedNodes.push(edge.source === nodeId ? edge.target : edge.source);
+                    }
+                });
+                
+                const avgWeight = connectionCount > 0 ? totalWeight / connectionCount : 0;
+                
+                nodeMetrics.set(nodeId, {
+                    connections: connectionCount,
+                    totalWeight: totalWeight,
+                    avgWeight: avgWeight,
+                    importance: nodeData.importance || 5,
+                    connectedNodes: connectedNodes
+                });
+            });
+            
+            // Calculate heat scores (normalized 0-1)
+            let maxConnections = 0;
+            nodeMetrics.forEach(metrics => {
+                maxConnections = Math.max(maxConnections, metrics.connections);
+            });
+            
+            nodeMetrics.forEach((metrics, nodeId) => {
+                // Heat score based on connections and average weight
+                const connectionScore = maxConnections > 0 ? metrics.connections / maxConnections : 0;
+                const weightScore = metrics.avgWeight;
+                const importanceScore = metrics.importance / 10;
+                
+                // Combined heat score
+                metrics.heatScore = (connectionScore * 0.5) + (weightScore * 0.3) + (importanceScore * 0.2);
+            });
+            
+            return maxConnections;
+        }
+        
+        // Render the heatmap
+        function renderHeatmap() {
+            const heatmapEl = document.getElementById('heatmap');
+            const nodeCount = nodes.size;
+            
+            if (nodeCount === 0) {
+                heatmapEl.innerHTML = `
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        <div>Waiting for consciousness data...</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const maxConnections = calculateNodeMetrics();
+            
+            // Calculate grid dimensions
+            const cols = Math.ceil(Math.sqrt(nodeCount));
+            const cellSize = Math.max(30, Math.min(60, Math.floor(600 / cols)));
+            
+            heatmapEl.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+            heatmapEl.innerHTML = '';
+            
+            // Sort nodes by heat score for visual grouping
+            const sortedNodes = Array.from(nodes.entries())
+                .sort((a, b) => {
+                    const heatA = nodeMetrics.get(a[0])?.heatScore || 0;
+                    const heatB = nodeMetrics.get(b[0])?.heatScore || 0;
+                    return heatB - heatA;
+                });
+            
+            // Create cells
+            sortedNodes.forEach(([nodeId, nodeData]) => {
+                const metrics = nodeMetrics.get(nodeId);
+                const heatScore = metrics?.heatScore || 0;
+                const color = getHeatColor(heatScore);
+                
+                const cell = document.createElement('div');
+                cell.className = 'heatmap-cell';
+                cell.style.backgroundColor = color;
+                cell.style.color = color;
+                cell.style.boxShadow = `0 0 ${heatScore * 15}px ${color}`;
+                cell.dataset.nodeId = nodeId;
+                cell.dataset.label = (nodeData.label || nodeId).substring(0, 12);
+                
+                cell.addEventListener('mouseenter', (e) => showTooltip(e, nodeId, nodeData, metrics));
+                cell.addEventListener('mouseleave', hideTooltip);
+                cell.addEventListener('click', () => selectNode(nodeId, nodeData, metrics));
+                
+                heatmapEl.appendChild(cell);
+            });
+            
+            // Update metrics display
+            document.getElementById('node-count').textContent = nodeCount;
+            document.getElementById('max-connections').textContent = maxConnections;
+            
+            // Calculate average connectivity
+            let totalConnections = 0;
+            nodeMetrics.forEach(m => totalConnections += m.connections);
+            const avgConnectivity = nodeCount > 0 ? (totalConnections / nodeCount).toFixed(2) : '0.00';
+            document.getElementById('avg-connectivity').textContent = avgConnectivity;
+        }
+        
+        // Show tooltip
+        function showTooltip(event, nodeId, nodeData, metrics) {
+            const tooltip = document.getElementById('tooltip');
+            const name = nodeData.label || nodeId;
+            
+            document.getElementById('tooltip-name').textContent = name;
+            document.getElementById('tooltip-stats').innerHTML = `
+                Connections: ${metrics?.connections || 0}<br>
+                Heat Score: ${((metrics?.heatScore || 0) * 100).toFixed(1)}%<br>
+                Avg Weight: ${(metrics?.avgWeight || 0).toFixed(3)}
+            `;
+            
+            tooltip.style.left = (event.clientX + 15) + 'px';
+            tooltip.style.top = (event.clientY - 10) + 'px';
+            tooltip.classList.add('visible');
+        }
+        
+        // Hide tooltip
+        function hideTooltip() {
+            document.getElementById('tooltip').classList.remove('visible');
+        }
+        
+        // Select a node
+        function selectNode(nodeId, nodeData, metrics) {
+            document.getElementById('selected-name').textContent = nodeData.label || nodeId;
+            document.getElementById('selected-connections').textContent = metrics?.connections || 0;
+            document.getElementById('selected-heat').textContent = 
+                ((metrics?.heatScore || 0) * 100).toFixed(1) + '%';
+            document.getElementById('selected-importance').textContent = 
+                (nodeData.importance || 5).toFixed(1);
+            document.getElementById('selected-weight').textContent = 
+                (metrics?.avgWeight || 0).toFixed(3);
+        }
+        
+        // WebSocket connection
+        const socket = io('http://localhost:5000');
+        
+        socket.on('connect', () => {
+            console.log('Connected to Elder Consciousness');
+        });
+        
+        socket.on('graph_update', (data) => {
+            console.log('Graph update received:', data);
+            
+            // Update nodes
+            if (data.nodes) {
+                data.nodes.forEach(node => {
+                    nodes.set(node.id, node);
+                });
+            }
+            
+            // Update edges
+            if (data.edges) {
+                edges = data.edges;
+            }
+            
+            // Re-render heatmap
+            renderHeatmap();
+        });
+        
+        // Request initial data
+        setTimeout(() => {
+            socket.emit('request_full_graph');
+        }, 500);
+    </script>
+</body>
+</html>
