@@ -129,6 +129,79 @@ class ConsciousnessDashboard:
             await self.emit_metrics()
             
         @self.sio.event
+        async def get_available_models(sid):
+            # Define available providers and their current models
+            providers = {
+                'anthropic': {
+                    'name': 'Anthropic',
+                    'model': config.ANTHROPIC_MODEL,
+                    'configured': bool(config.ANTHROPIC_API_KEY)
+                },
+                'ollama': {
+                    'name': 'Ollama',
+                    'model': config.OLLAMA_MODEL,
+                    'configured': True # Assume configured if running locally
+                },
+                'openai': {
+                    'name': 'OpenAI',
+                    'model': config.OPENAI_MODEL,
+                    'configured': bool(config.OPENAI_API_KEY)
+                },
+                'gemini': {
+                    'name': 'Google Gemini',
+                    'model': config.GEMINI_MODEL,
+                    'configured': bool(config.GEMINI_API_KEY)
+                },
+                'lmstudio': {
+                    'name': 'LM Studio',
+                    'model': config.LMSTUDIO_MODEL,
+                    'configured': True # No key needed usually
+                }
+            }
+            
+            await self.sio.emit('model_info', {
+                'current_provider': config.LLM_PROVIDER,
+                'providers': providers
+            }, room=sid)
+
+        @self.sio.event
+        async def switch_model(sid, data):
+            provider = data.get('provider')
+            
+            if provider:
+                # Check if provider is configured
+                is_configured = True
+                if provider == 'anthropic' and not config.ANTHROPIC_API_KEY:
+                    is_configured = False
+                elif provider == 'openai' and not config.OPENAI_API_KEY:
+                    is_configured = False
+                elif provider == 'gemini' and not config.GEMINI_API_KEY:
+                    is_configured = False
+                
+                if not is_configured:
+                    await self.sio.emit('model_switch_error', {
+                        'error': f"API Key missing for {provider}. Please check your .env file."
+                    }, room=sid)
+                    return
+
+                logger.info(f"Switching model provider to: {provider}")
+                config.LLM_PROVIDER = provider
+                
+                try:
+                    # Re-initialize LLM
+                    self.consciousness._setup_llm()
+                    await self.sio.emit('model_switched', {
+                        'success': True,
+                        'provider': provider,
+                        'message': f"Switched to {provider}"
+                    }, room=sid)
+                except Exception as e:
+                    logger.error(f"Failed to switch model: {e}")
+                    await self.sio.emit('model_switch_error', {
+                        'error': str(e)
+                    }, room=sid)
+
+        @self.sio.event
         async def chat_message(sid, data):
             """Handle incoming chat messages from the terminal"""
             try:

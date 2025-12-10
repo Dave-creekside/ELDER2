@@ -43,6 +43,7 @@ function cacheElements() {
     elements.chatInput = document.getElementById('chat-input');
     elements.sendButton = document.getElementById('send-button');
     elements.messagesContainer = document.getElementById('messages');
+    elements.messagesScrollContainer = document.getElementById('messages-container');
     elements.thinkingIndicator = document.getElementById('thinking');
 }
 
@@ -152,6 +153,78 @@ function initializeSocket() {
         console.log('Connected to ELDER');
         elements.connectionStatus.classList.add('connected');
         elements.connectionText.textContent = 'Connected';
+        // Request model info on connect
+        socket.emit('get_available_models');
+    });
+
+    socket.on('model_info', (data) => {
+        console.log('Received model info:', data);
+        const selector = document.getElementById('model-selector');
+        if (!selector) return;
+        
+        selector.innerHTML = '';
+        
+        Object.entries(data.providers).forEach(([provider, info]) => {
+            const option = document.createElement('option');
+            option.value = provider;
+            option.textContent = `${info.name} (${info.model})`;
+            if (provider === data.current_provider) {
+                option.selected = true;
+            }
+            // Mark unconfigured options visually or disable them
+            if (!info.configured) {
+                option.textContent += ' [No Key]';
+                // option.disabled = true; // Let user try so they get the error message
+                option.style.color = '#ff4040';
+            }
+            selector.appendChild(option);
+        });
+        
+        // Remove old listener if any to avoid duplicates (clone node trick)
+        const newSelector = selector.cloneNode(true);
+        selector.parentNode.replaceChild(newSelector, selector);
+        
+        newSelector.addEventListener('change', (e) => {
+            const provider = e.target.value;
+            console.log('Switching model to:', provider);
+            // Show loading state
+            newSelector.disabled = true;
+            newSelector.style.opacity = '0.5';
+            socket.emit('switch_model', { provider });
+        });
+    });
+
+    socket.on('model_switched', (data) => {
+        const selector = document.getElementById('model-selector');
+        if (selector) {
+            selector.disabled = false;
+            selector.style.opacity = '1';
+        }
+        
+        if (data.success) {
+            console.log('Model switched:', data.message);
+            // Flash success
+            selector.style.borderColor = '#00ff88';
+            setTimeout(() => { selector.style.borderColor = ''; }, 1000);
+        } else {
+            console.error('Failed to switch model:', data.error);
+            // Flash error
+            selector.style.borderColor = '#ff4040';
+            setTimeout(() => { selector.style.borderColor = ''; }, 1000);
+            // Reset selection if possible (would need to track previous)
+        }
+    });
+
+    socket.on('model_switch_error', (data) => {
+        console.error('Model switch error:', data.error);
+        const selector = document.getElementById('model-selector');
+        if (selector) {
+            selector.disabled = false;
+            selector.style.opacity = '1';
+            selector.style.borderColor = '#ff4040';
+            setTimeout(() => { selector.style.borderColor = ''; }, 1000);
+        }
+        alert(data.error);
     });
     
     socket.on('disconnect', () => {
@@ -294,9 +367,13 @@ function hideThinking() {
 
 // Scroll chat to bottom
 function scrollToBottom() {
-    const container = document.querySelector('.terminal-container');
+    const container = elements.messagesScrollContainer || document.getElementById('messages-container');
     if (container) {
-        container.scrollTop = container.scrollHeight;
+        // Use smooth scrolling for a better UX
+        container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+        });
     }
 }
 
@@ -357,6 +434,7 @@ window.testChat = function() {
     setTimeout(() => {
         console.log('Test complete. Check if messages are visible.');
         console.log('Messages container children:', elements.messagesContainer.children.length);
-        console.log('Container scroll height:', document.querySelector('.terminal-container').scrollHeight);
+        const scrollContainer = document.getElementById('messages-container');
+        console.log('Container scroll height:', scrollContainer ? scrollContainer.scrollHeight : 'N/A');
     }, 2500);
 };

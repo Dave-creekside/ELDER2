@@ -95,10 +95,10 @@ body {
     background: #000;
 }
 
-/* Terminal Tab Specific Styles */
+/* Chat Tab Styles */
 #terminal-tab {
-    background: #0a0a0a;
-    flex-direction: column;
+    background: linear-gradient(180deg, #0a0a0a 0%, #111 100%);
+    overflow: hidden;
 }
 
 /* When terminal tab is active, use flex display */
@@ -106,23 +106,32 @@ body {
     display: flex;
 }
 
-.terminal-container {
+/* Chat wrapper - full height flex container */
+.chat-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* Scrollable messages container */
+.chat-messages-container {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-    /* Critical for proper scrolling in flexbox */
-    min-height: 0;
-    position: relative;
-}
-
-.terminal-messages {
+    padding: 20px;
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    padding: 20px;
-    /* Ensure messages don't force container to grow */
-    min-height: min-content;
+}
+
+/* Messages list */
+.chat-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: auto; /* Push messages to bottom when few */
 }
 
 .message {
@@ -225,54 +234,67 @@ body {
     }
 }
 
-/* Terminal Input */
-.terminal-input {
+/* Chat Input Container */
+.chat-input-container {
     display: flex;
-    gap: 10px;
-    padding: 20px;
-    background: rgba(0, 0, 0, 0.6);
+    gap: 12px;
+    padding: 16px 20px;
+    background: rgba(0, 0, 0, 0.8);
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
 }
 
-.terminal-input input {
+.chat-input-container input {
     flex: 1;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-    padding: 12px 16px;
-    color: #fff;
-    font-size: 14px;
-    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-    outline: none;
-    transition: all 0.3s ease;
-}
-
-.terminal-input input:focus {
     background: rgba(255, 255, 255, 0.08);
-    border-color: #00ff88;
-    box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.2);
-}
-
-.terminal-input button {
-    background: rgba(0, 255, 136, 0.2);
-    border: 1px solid #00ff88;
-    color: #00ff88;
-    padding: 12px 24px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 24px;
+    padding: 14px 20px;
+    color: #fff;
+    font-size: 15px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     outline: none;
+    transition: all 0.2s ease;
 }
 
-.terminal-input button:hover {
-    background: rgba(0, 255, 136, 0.3);
-    transform: translateY(-1px);
+.chat-input-container input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
 }
 
-.terminal-input button:active {
-    transform: scale(0.98);
+.chat-input-container input:focus {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #00ff88;
+    box-shadow: 0 0 0 3px rgba(0, 255, 136, 0.15);
+}
+
+.chat-input-container button {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    outline: none;
+    flex-shrink: 0;
+}
+
+.chat-input-container button svg {
+    color: #000;
+    transform: translateX(1px);
+}
+
+.chat-input-container button:hover {
+    background: linear-gradient(135deg, #00ffaa 0%, #00dd77 100%);
+    transform: scale(1.05);
+    box-shadow: 0 4px 20px rgba(0, 255, 136, 0.4);
+}
+
+.chat-input-container button:active {
+    transform: scale(0.95);
 }
 
 /* Status Bar */
@@ -321,20 +343,68 @@ body {
     }
 }
 
-/* Scrollbar Styling */
-.terminal-container::-webkit-scrollbar {
-    width: 8px;
+/* Model Selector */
+.model-selector-container {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
-.terminal-container::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.terminal-container::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
+.model-select {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    color: #00ff88;
+    padding: 4px 8px;
     border-radius: 4px;
+    font-family: inherit;
+    font-size: 11px;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
 }
 
-.terminal-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+.model-select:hover {
+    background: rgba(0, 255, 136, 0.1);
+    border-color: rgba(0, 255, 136, 0.5);
+}
+
+.model-select option {
+    background: #000;
+    color: #fff;
+}
+
+/* Scrollbar Styling */
+.chat-messages-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-messages-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+/* Message styling enhancements */
+.message.user {
+    background: linear-gradient(135deg, rgba(0, 128, 255, 0.25) 0%, rgba(0, 100, 200, 0.2) 100%);
+    border: 1px solid rgba(0, 128, 255, 0.35);
+    border-radius: 18px 18px 4px 18px;
+}
+
+.message.elder {
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.12) 0%, rgba(0, 200, 100, 0.08) 100%);
+    border: 1px solid rgba(0, 255, 136, 0.25);
+    border-radius: 18px 18px 18px 4px;
+}
+
+.message.system {
+    border-radius: 12px;
+    padding: 10px 16px;
 }
