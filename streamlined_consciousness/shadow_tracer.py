@@ -48,9 +48,9 @@ class ShadowTracer:
             
             # Common paths for transformer layers
             paths = [
-                lambda m: m.model.layers,      # Standard Llama/Gemma
+                lambda m: m.model.layers,      # Standard Llama/Gemma/Mistral
                 lambda m: m.layers,            # Some configurations
-                lambda m: m.transformer.h,     # GPT-2 style
+                lambda m: m.transformer.h,     # GPT-2/Phi-2 style
                 lambda m: m.base_model.model.model.layers, # PEFT wrapped
                 lambda m: m.base_model.model.layers,      # PEFT wrapped alternate
                 # Multimodal/VLM specific paths
@@ -58,12 +58,12 @@ class ShadowTracer:
                 lambda m: m.text_model.encoder.layers,
             ]
             
-            for path_fn in paths:
+            for i, path_fn in enumerate(paths):
                 try:
                     layers = path_fn(self.student.model)
                     if layers and len(layers) > 0:
                         target_layer = layers[-1]
-                        logger.info(f"✅ Found transformer layers using path: {path_fn}")
+                        logger.info(f"✅ Found transformer layers using path strategy #{i+1}")
                         break
                 except:
                     continue

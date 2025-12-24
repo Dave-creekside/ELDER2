@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELDER Student Model</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0f1b;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 40px;
+            line-height: 1.6;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #00ff88, #00aaff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #888; margin-bottom: 40px; }
+        
+        .student-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        .card h2 {
+            font-size: 1.2em;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #00ff88;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .metric:last-child { border-bottom: none; }
+        .metric-label { color: #aaa; }
+        .metric-value { font-weight: 600; font-family: 'SF Mono', Monaco, monospace; }
+        
+        .project-select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            width: 200px;
+            font-family: inherit;
+        }
+        
+        .progress-container {
+            width: 100%;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin: 15px 0;
+            height: 10px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(45deg, #00ff88, #00aaff);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        
+        button {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            border: none;
+        }
+        
+        .btn-sleep {
+            background: rgba(0, 170, 255, 0.2);
+            border: 1px solid #00aaff;
+            color: #00aaff;
+        }
+        .btn-sleep:hover {
+            background: rgba(0, 170, 255, 0.3);
+            box-shadow: 0 0 15px rgba(0, 170, 255, 0.2);
+        }
+        
+        .btn-action {
+            background: rgba(255, 170, 0, 0.2);
+            border: 1px solid #ffaa00;
+            color: #ffaa00;
+        }
+        .btn-action:hover {
+            background: rgba(255, 170, 0, 0.3);
+        }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .active-sleep {
+            color: #00ff88;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👨‍🎓 Student Model Management</h1>
+        <p class="subtitle">Manage the local learner, projects, and knowledge consolidation.</p>
+        
+        <div class="student-grid">
+            <!-- Project Management -->
+            <div class="card">
+                <h2>📁 Project Identity</h2>
+                <div class="metric">
+                    <span class="metric-label">Current Project</span>
+                    <select id="project-selector" class="project-select" onchange="switchProject(this.value)">
+                        <option value="default" selected>default</option>
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Adapter Path</span>
+                    <span class="metric-value" id="adapter-path" style="font-size: 0.8em; color: #888;">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Base Model</span>
+                    <span class="metric-value" id="base-model">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Dimension</span>
+                    <span class="metric-value" id="model-dim">-</span>
+                </div>
+                <button class="btn-action" onclick="createNewProject()">+ Create New Project</button>
+            </div>
+            
+            <!-- Metabolic Status (Traces & Sleep) -->
+            <div class="card">
+                <h2>💤 Metabolic Status</h2>
+                <div class="metric">
+                    <span class="metric-label">State</span>
+                    <span class="metric-value" id="sleep-mode">Idle</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Pending Traces</span>
+                    <span class="metric-value" id="trace-count">0</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" id="trace-progress"></div>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Last Sleep</span>
+                    <span class="metric-value" id="last-sleep">Never</span>
+                </div>
+                <button class="btn-sleep" onclick="induceDeepSleep()">
+                    💤 Induce Deep Sleep Cycle
+                </button>
+            </div>
+            
+            <!-- Graduation (Merge & Export) -->
+            <div class="card">
+                <h2>🎓 Graduation</h2>
+                <div class="metric">
+                    <span class="metric-label">Training Steps</span>
+                    <span class="metric-value" id="training-steps">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Loss</span>
+                    <span class="metric-value" id="training-loss">-</span>
+                </div>
+                <div style="margin-top: 20px;">
+                    <button class="btn-action" onclick="mergeAdapter()" disabled title="Coming soon">
+                        🔄 Merge Adapter to Base
+                    </button>
+                    <button class="btn-action" onclick="uploadToHub()" disabled title="Coming soon" style="margin-top: 10px;">
+                        ☁️ Upload to HuggingFace
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentProject = 'default';
+
+        socket.on('connect', () => {
+            console.log('Connected to Student Dashboard');
+            requestStatus();
+        });
+
+        socket.on('student_status', (data) => {
+            console.log('Student Status:', data);
+            
+            // Update Project Info
+            const selector = document.getElementById('project-selector');
+            // Save current selection if not updating list
+            if (data.projects) {
+                const currentSelection = selector.value;
+                // Only update if list changed or empty
+                if (selector.options.length <= 1 || data.current_project !== currentSelection) {
+                    selector.innerHTML = '';
+                    data.projects.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p;
+                        opt.text = p;
+                        if (p === data.current_project) opt.selected = true;
+                        selector.appendChild(opt);
+                    });
+                }
+            }
+            
+            document.getElementById('adapter-path').textContent = data.adapter_path || '-';
+            document.getElementById('base-model').textContent = data.base_model || '-';
+            document.getElementById('model-dim').textContent = data.dimension || '-';
+            
+            // Update Metabolic Status
+            const modeEl = document.getElementById('sleep-mode');
+            if (data.deep_sleep_active) {
+                modeEl.textContent = 'DEEP SLEEP';
+                modeEl.classList.add('active-sleep');
+            } else {
+                modeEl.textContent = 'Wake Cycle (Gathering)';
+                modeEl.classList.remove('active-sleep');
+            }
+            
+            const count = data.pending_traces || 0;
+            const threshold = 50; // Visual threshold
+            document.getElementById('trace-count').textContent = count;
+            document.getElementById('trace-progress').style.width = Math.min(100, (count/threshold)*100) + '%';
+        });
+
+        function requestStatus() {
+            socket.emit('request_student_status');
+        }
+
+        function switchProject(projectId) {
+            if(confirm(`Switch to project '${projectId}'? This will load a different brain adapter.`)) {
+                socket.emit('switch_project', { project_id: projectId });
+            } else {
+                // Revert selection
+                requestStatus(); 
+            }
+        }
+
+        function createNewProject() {
+            const name = prompt("Enter new project name (no spaces):");
+            if (name) {
+                // Clean name
+                const cleanName = name.replace(/[^a-zA-Z0-9_-]/g, '');
+                if (cleanName) {
+                    socket.emit('switch_project', { project_id: cleanName });
+                }
+            }
+        }
+
+        function induceDeepSleep() {
+            if (!confirm("Induce Deep Sleep? Responsiveness will be paused.")) return;
+            fetch('/induce_sleep', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    alert(d.message);
+                    requestStatus();
+                });
+        }
+
+        // Auto-refresh status
+        setInterval(requestStatus, 5000);
+    </script>
+</body>
+</html>

@@ -88,8 +88,17 @@ class Config:
 
     # Student Model (Local Learner) Configuration
     STUDENT_MODEL_ID = os.getenv('STUDENT_MODEL_ID', 'unsloth/gemma-3-4b-it')
+    ADAPTERS_ROOT_DIR = os.getenv('ADAPTERS_ROOT_DIR', 'adapters')
+    
+    # LoRA Configuration
     LORA_RANK = int(os.getenv('LORA_RANK', 32))
     LORA_ALPHA = int(os.getenv('LORA_ALPHA', 64))
+    
+    # Parse list from comma-separated string
+    LORA_TARGET_MODULES = os.getenv('LORA_TARGET_MODULES', 'q_proj,v_proj,k_proj,o_proj').split(',')
+    
+    # Deep Sleep Configuration
+    DEEP_SLEEP_SVD_RANK = int(os.getenv('DEEP_SLEEP_SVD_RANK', 32))
 
     @staticmethod
     def validate():

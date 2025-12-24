@@ -17,6 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mcp_servers.qdrant_memory.server import QdrantMemoryServer
 from mcp_servers.neo4j_hypergraph.server import Neo4jSemanticHypergraphServer
 from streamlined_consciousness.student_model import StudentModel
+from streamlined_consciousness.config import config
 
 # Configure logging
 logger = logging.getLogger("deep-sleep-engine")
@@ -30,7 +31,7 @@ class DeepSleepEngine:
         self.student = student_model
         self.trace_collection = "shadow_traces"
         self.embedding_dim = 3072 # Will update from model
-        self.k_components = 32
+        self.k_components = config.DEEP_SLEEP_SVD_RANK
         self.learning_rate = 0.001
 
     async def _ensure_connections(self):
@@ -124,7 +125,7 @@ class DeepSleepEngine:
             # d_lora_B += lr * (natural_delta * (lora_A * input))
             
             # Identify target modules (e.g., q_proj, v_proj)
-            target_modules = ["q_proj", "v_proj"] 
+            target_modules = config.LORA_TARGET_MODULES
             
             for concept, concept_traces in traces_by_concept.items():
                 if len(concept_traces) < 2:
@@ -138,7 +139,22 @@ class DeepSleepEngine:
                 # SVD for Metric Tensor
                 try:
                     U, S, Vt = np.linalg.svd(deltas.T, full_matrices=False)
-                    k = min(self.k_components, len(S))
+                    
+                    # Adaptive Rank Selection
+                    if self.k_components <= 0:
+                        # Adaptive: Keep 95% of explained variance
+                        total_variance = np.sum(S**2)
+                        if total_variance > 1e-9:
+                            cumulative_variance = np.cumsum(S**2)
+                            # Find index where variance >= 0.95
+                            explained_ratio = cumulative_variance / total_variance
+                            k = np.searchsorted(explained_ratio, 0.95) + 1
+                            logger.info(f"Adaptive SVD: Selected k={k} (95% variance) for {concept}")
+                        else:
+                            k = 1
+                    else:
+                        k = min(self.k_components, len(S))
+                        
                     U_k = U[:, :k]
                     S_k = S[:k]
                     

@@ -51,6 +51,9 @@ class ConsciousnessDashboard:
         
         async def scale(request):
             return web.Response(text=self.get_scale_html(), content_type='text/html')
+            
+        async def student(request):
+            return web.Response(text=self.get_student_html(), content_type='text/html')
         
         self.app.router.add_get('/', index)
         self.app.router.add_get('/dashboard', dashboard_legacy)
@@ -59,6 +62,7 @@ class ConsciousnessDashboard:
         self.app.router.add_get('/heatmap', heatmap)
         self.app.router.add_get('/matrix', matrix)
         self.app.router.add_get('/scale', scale)
+        self.app.router.add_get('/student', student)
         
         # Serve individual HTML files for the unified dashboard to load
         async def serve_html(request):
@@ -111,6 +115,68 @@ class ConsciousnessDashboard:
         self.app.router.add_post('/clear_history', self.handle_clear_history)
         self.app.router.add_post('/dream', self.handle_dream)
         self.app.router.add_post('/induce_sleep', self.handle_induce_sleep)
+
+        @self.sio.event
+        async def request_student_status(sid):
+            """Get status of the Student Model"""
+            student = self.consciousness.student_model
+            
+            # Lazy load if needed
+            if not student:
+                await self.consciousness._ensure_student_loaded()
+                student = self.consciousness.student_model
+            
+            if not student:
+                await self.sio.emit('student_status', {'error': 'Student model failed to load'}, room=sid)
+                return
+            
+            # List projects in adapters folder
+            projects = ["default"]
+            try:
+                root = config.ADAPTERS_ROOT_DIR
+                if os.path.exists(root):
+                    projects = [d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))]
+                    if "default" not in projects:
+                        projects.append("default")
+            except Exception as e:
+                logger.warning(f"Failed to list projects: {e}")
+            
+            # Get pending traces count
+            pending = 0
+            if self.consciousness.tracer:
+                pending = len(self.consciousness.tracer.buffer)
+                # Try to get from Qdrant too
+                try:
+                    # This is heavy, maybe just use buffer for now or cache it
+                    pass 
+                except: pass
+            
+            status = {
+                'current_project': student.project_id,
+                'adapter_path': student.adapter_path,
+                'base_model': student.model_id,
+                'dimension': getattr(self.consciousness.tracer, 'embedding_dim', 'Unknown') if self.consciousness.tracer else 'Unknown',
+                'projects': sorted(list(set(projects))),
+                'deep_sleep_active': self.consciousness.processing_lock.locked(),
+                'pending_traces': pending
+            }
+            await self.sio.emit('student_status', status, room=sid)
+
+        @self.sio.event
+        async def switch_project(sid, data):
+            """Switch the active student project"""
+            project_id = data.get('project_id')
+            if project_id and self.consciousness.student_model:
+                try:
+                    logger.info(f"Dashboard requested project switch to: {project_id}")
+                    # Run in thread to avoid blocking loop
+                    await asyncio.to_thread(self.consciousness.student_model.switch_project, project_id)
+                    await self.sio.emit('project_switched', {'success': True, 'project': project_id}, room=sid)
+                    # Trigger status update
+                    await request_student_status(sid)
+                except Exception as e:
+                    logger.error(f"Error switching project: {e}")
+                    await self.sio.emit('error', {'message': str(e)}, room=sid)
 
         @self.sio.event
         async def connect(sid, environ):
@@ -1318,6 +1384,27 @@ class ConsciousnessDashboard:
     <p>Please ensure scale-invariance.html is in the frontend directory.</p>
 </body>
 </html>"""
+
+    def get_student_html(self):
+        """Return the Student Dashboard HTML as a string"""
+        try:
+            # Look for HTML file in multiple locations
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '..', 'frontend', 'student.html'),
+                os.path.join(os.path.dirname(__file__), 'student.html'),
+                'frontend/student.html'
+            ]
+            
+            for html_path in possible_paths:
+                if os.path.exists(html_path):
+                    with open(html_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+            
+            raise FileNotFoundError("student.html not found")
+            
+        except Exception as e:
+            logger.error(f"Error reading Student HTML file: {e}")
+            return f"Error loading student dashboard: {e}"
     
     def get_unified_dashboard_html(self):
         """Return the unified dashboard HTML as a string"""

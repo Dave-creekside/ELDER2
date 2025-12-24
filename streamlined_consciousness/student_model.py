@@ -23,10 +23,66 @@ class StudentModel:
             
         self.model = None
         self.tokenizer = None
-        self.adapter_path = "adapters/active_mind"
+        self.project_id = "default"
+        self.adapter_path = self.get_adapter_path(self.project_id)
         
         # Ensure adapter directory exists
         os.makedirs(os.path.dirname(self.adapter_path), exist_ok=True)
+
+    def get_adapter_path(self, project_id: str) -> str:
+        """Get the adapter path for a specific project"""
+        # Sanitize model ID for path usage (replace / with _)
+        model_slug = self.model_id.replace("/", "_")
+        return os.path.join(config.ADAPTERS_ROOT_DIR, project_id, model_slug)
+
+    def switch_project(self, project_id: str):
+        """Switch the active adapter to a different project"""
+        if project_id == self.project_id:
+            return
+            
+        logger.info(f"Switching project from {self.project_id} to {project_id}")
+        
+        # Save current state if model is loaded
+        if self.model:
+            self.save_adapter()
+            
+        self.project_id = project_id
+        self.adapter_path = self.get_adapter_path(project_id)
+        os.makedirs(os.path.dirname(self.adapter_path), exist_ok=True)
+        
+        # If model is loaded, we need to reload the adapter
+        if self.model:
+            try:
+                # Get the underlying base model
+                # PeftModel -> Base Model
+                if hasattr(self.model, "unload"):
+                    base_model = self.model.unload()
+                else:
+                    # Fallback if unload not available (older PEFT)
+                    base_model = self.model.base_model
+                
+                # Re-initialize adapter
+                if os.path.exists(self.adapter_path):
+                    logger.info(f"Loading existing adapter from {self.adapter_path}")
+                    self.model = PeftModel.from_pretrained(base_model, self.adapter_path, is_trainable=True)
+                else:
+                    logger.info(f"Initializing new adapter for {project_id}")
+                    peft_config = LoraConfig(
+                        task_type=TaskType.CAUSAL_LM,
+                        inference_mode=False, 
+                        r=config.LORA_RANK,
+                        lora_alpha=config.LORA_ALPHA,
+                        lora_dropout=0.05,
+                        target_modules=config.LORA_TARGET_MODULES
+                    )
+                    self.model = get_peft_model(base_model, peft_config)
+                    
+                logger.info(f"Switched to project: {project_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to switch project adapter: {e}")
+                # Try to recover by reloading full model
+                self.load()
 
     def load(self):
         """Load the model and adapter in 4-bit quantization"""
@@ -76,7 +132,7 @@ class StudentModel:
                     r=config.LORA_RANK,
                     lora_alpha=config.LORA_ALPHA,
                     lora_dropout=0.05,
-                    target_modules=["q_proj", "v_proj", "k_proj", "o_proj"] # Common for Llama/Gemma
+                    target_modules=config.LORA_TARGET_MODULES
                 )
                 self.model = get_peft_model(self.model, peft_config)
             
@@ -121,19 +177,23 @@ class StudentModel:
         if not self.model:
             return 3072 # Default fallback
             
-        config = self.model.config
+        cfg = self.model.config
         
-        # Try common attribute names
-        if hasattr(config, "hidden_size"):
-            return config.hidden_size
-        elif hasattr(config, "d_model"):
-            return config.d_model
-        elif hasattr(config, "dim"):
-            return config.dim
+        # Priority list of attribute names
+        attributes = ["hidden_size", "d_model", "dim", "n_embd", "embedding_size"]
+        
+        for attr in attributes:
+            if hasattr(cfg, attr):
+                val = getattr(cfg, attr)
+                if isinstance(val, int) and val > 0:
+                    logger.info(f"Detected hidden size from config.{attr}: {val}")
+                    return val
         
         # Try to infer from embedding layer
         try:
-            return self.model.get_input_embeddings().weight.shape[1]
+            val = self.model.get_input_embeddings().weight.shape[1]
+            logger.info(f"Detected hidden size from embedding layer: {val}")
+            return val
         except:
             pass
             
