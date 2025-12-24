@@ -99,6 +99,11 @@ class ShadowTracer:
                     # Move to CPU and numpy
                     trace_vector = hidden_states.mean(dim=1).float().cpu().numpy()
                     
+                    # Sanitize NaNs and Infs (often caused by float16 overflow/underflow on MPS)
+                    if np.isnan(trace_vector).any() or np.isinf(trace_vector).any():
+                        logger.warning(f"⚠️ Trace vector contains NaN/Inf! Zeroing them out. Max val before: {np.nanmax(trace_vector) if not np.all(np.isnan(trace_vector)) else 'All NaN'}")
+                        trace_vector = np.nan_to_num(trace_vector, nan=0.0, posinf=0.0, neginf=0.0)
+                    
                     # Store for retrieval
                     self.current_trace = trace_vector[0].tolist() # Batch size 1 assumption
             
@@ -247,6 +252,10 @@ class ShadowTracer:
                 
         except Exception as e:
             logger.error(f"Failed to flush traces: {e}")
+            # Log sample of failing point for debugging
+            if self.buffer and len(self.buffer) > 0:
+                sample_vec = self.buffer[0]['vector'][:5]
+                logger.error(f"Sample failing vector start: {sample_vec}")
 
     def remove_hooks(self):
         """Cleanup hooks"""

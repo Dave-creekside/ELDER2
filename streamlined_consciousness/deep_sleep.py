@@ -171,10 +171,6 @@ class DeepSleepEngine:
                         damped_projections = projections / (S_k + 1e-6)
                         natural_delta = delta - (U_k @ (projections - damped_projections))
                         
-                        # Convert to torch tensors
-                        natural_delta_t = torch.tensor(natural_delta, device=self.student.device, dtype=torch.float16)
-                        input_mean_t = torch.tensor(input_mean, device=self.student.device, dtype=torch.float16)
-                        
                         # Apply to LoRA weights
                         # Iterate through all LoRA layers and apply a small update
                         # This spreads the knowledge across the network (holographic-like)
@@ -185,6 +181,13 @@ class DeepSleepEngine:
                                 if any(t in name for t in target_modules) and hasattr(module, "lora_B"):
                                     # module.lora_B is [out_features, rank]
                                     # module.lora_A is [rank, in_features]
+                                    
+                                    # Detect target dtype from the LoRA weights (usually float32 even if model is 4bit)
+                                    target_dtype = module.lora_A['default'].weight.dtype
+                                    
+                                    # Convert to torch tensors with correct dtype
+                                    natural_delta_t = torch.tensor(natural_delta, device=self.student.device, dtype=target_dtype)
+                                    input_mean_t = torch.tensor(input_mean, device=self.student.device, dtype=target_dtype)
                                     
                                     # We want the output of (B*A*x) to move by natural_delta
                                     # Update B: dB ~ natural_delta * (A*x)^T

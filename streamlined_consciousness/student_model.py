@@ -90,11 +90,11 @@ class StudentModel:
         
         try:
             # Quantization config for memory efficiency
-            # Note: BitsAndBytes might have issues on MPS (Mac), fallback to float16 if needed
+            # Note: BitsAndBytes might have issues on MPS (Mac), fallback to float32 for stability
             if self.device == "mps":
-                logger.info("MPS detected: Using float16 (BitsAndBytes 4-bit not supported on MPS)")
+                logger.info("MPS detected: Using float32 (BitsAndBytes 4-bit not supported on MPS)")
                 quantization_config = None
-                torch_dtype = torch.float16
+                torch_dtype = torch.float32
             else:
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True,

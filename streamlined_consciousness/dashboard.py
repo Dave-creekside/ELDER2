@@ -144,12 +144,19 @@ class ConsciousnessDashboard:
             # Get pending traces count
             pending = 0
             if self.consciousness.tracer:
-                pending = len(self.consciousness.tracer.buffer)
-                # Try to get from Qdrant too
-                try:
-                    # This is heavy, maybe just use buffer for now or cache it
-                    pass 
-                except: pass
+                pending += len(self.consciousness.tracer.buffer)
+                
+            # Try to get from Qdrant too
+            try:
+                from qdrant_client import QdrantClient
+                # Use a fresh client to avoid async conflicts with the shared server
+                client = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
+                info = await asyncio.to_thread(client.get_collection, "shadow_traces")
+                if info.points_count is not None:
+                    pending += info.points_count
+            except Exception as e:
+                # It's okay if collection doesn't exist yet
+                logger.debug(f"Could not get shadow_traces count: {e}")
             
             status = {
                 'current_project': student.project_id,
