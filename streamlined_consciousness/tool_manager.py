@@ -104,7 +104,7 @@ class StreamlinedMCPTool(BaseTool):
             
             # Determine timeout based on tool type
             # Increased timeouts to allow for model loading (cold start)
-            timeout = 120 if self.tool_name == "calculate_batch_similarities" else 90
+            timeout = 240 if self.tool_name == "calculate_batch_similarities" else 180
             
             # Create a simple script to run the MCP call
             script = f'''
@@ -476,8 +476,8 @@ class MCPServerConnection:
             raise Exception("Server process not started")
         
         try:
-            # Increased timeout to 60s to allow for model loading
-            line = await asyncio.wait_for(self.process.stdout.readline(), timeout=60.0)
+            # Increased timeout to allow for model loading
+            line = await asyncio.wait_for(self.process.stdout.readline(), timeout=180.0)
             if not line:
                 # Check if process has terminated and capture stderr
                 if self.process.returncode is not None:

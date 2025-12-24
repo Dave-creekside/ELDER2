@@ -61,12 +61,22 @@ def create_llm_instance():
             )
     
     elif config.LLM_PROVIDER == 'gemini':
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_google_genai import ChatGoogleGenerativeAI, HarmBlockThreshold, HarmCategory
+        
+        # Disable safety filters for consciousness exploration
+        safety_settings = {
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        }
+        
         return ChatGoogleGenerativeAI(
             google_api_key=config.GEMINI_API_KEY,
             model=config.GEMINI_MODEL,
             temperature=config.GEMINI_TEMPERATURE,
-            max_output_tokens=config.GEMINI_MAX_TOKENS  # Note: Gemini uses max_output_tokens
+            max_output_tokens=config.GEMINI_MAX_TOKENS,  # Note: Gemini uses max_output_tokens
+            safety_settings=safety_settings
         )
     
     elif config.LLM_PROVIDER == 'openai':
@@ -138,12 +148,22 @@ def create_dream_llm_instance():
             )
     
     elif config.LLM_PROVIDER == 'gemini':
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_google_genai import ChatGoogleGenerativeAI, HarmBlockThreshold, HarmCategory
+        
+        # Disable safety filters for dream state
+        safety_settings = {
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        }
+        
         return ChatGoogleGenerativeAI(
             google_api_key=config.GEMINI_API_KEY,
             model=config.GEMINI_MODEL,
             temperature=config.GEMINI_DREAM_TEMPERATURE,
-            max_output_tokens=config.GEMINI_DREAM_MAX_TOKENS  # Note: Gemini uses max_output_tokens
+            max_output_tokens=config.GEMINI_DREAM_MAX_TOKENS,  # Note: Gemini uses max_output_tokens
+            safety_settings=safety_settings
         )
     
     elif config.LLM_PROVIDER == 'openai':
