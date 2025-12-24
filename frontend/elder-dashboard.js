@@ -139,7 +139,8 @@ function setupTabSwitching() {
 function initializeSocket() {
     if (socket) return; // Already initialized
     
-    socket = io('http://localhost:5000', {
+    // Use relative URL for socket connection
+    socket = io({
         reconnectionDelay: 1000,
         reconnection: true,
         reconnectionAttempts: 10,

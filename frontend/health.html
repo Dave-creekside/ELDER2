@@ -175,6 +175,44 @@
         .connection-dot.connected {
             background: #00ff40;
         }
+        
+        .progress-container {
+            width: 100%;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: linear-gradient(45deg, #00ff88, #00aaff);
+            border-radius: 10px;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        
+        .btn-sleep {
+            background: rgba(0, 170, 255, 0.2);
+            border: 1px solid #00aaff;
+            color: #00aaff;
+            margin-top: 15px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-sleep:hover {
+            background: rgba(0, 170, 255, 0.3);
+            box-shadow: 0 0 15px rgba(0, 170, 255, 0.2);
+        }
+        
+        .active-sleep {
+            color: #00ff88;
+            animation: pulse 1s infinite;
+        }
     </style>
 </head>
 <body>
@@ -335,6 +373,28 @@
                 </div>
             </div>
             
+            <!-- Metabolic Status (Riemannian Consolidation) -->
+            <div class="health-card">
+                <h2>
+                    <span class="status-icon status-unknown" id="metabolic-status">?</span>
+                    Metabolic Status
+                </h2>
+                <div class="metric">
+                    <span class="metric-label">Process</span>
+                    <span class="metric-value" id="sleep-mode">Idle</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Pending Traces</span>
+                    <span class="metric-value" id="trace-count">0 / 50</span>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" id="trace-progress"></div>
+                </div>
+                <button class="btn-sleep" onclick="induceDeepSleep()">
+                    💤 Induce Deep Sleep
+                </button>
+            </div>
+
             <!-- Recent Activity -->
             <div class="health-card">
                 <h2>
@@ -401,6 +461,21 @@
             return `${hours}h ${minutes}m`;
         }
         
+        function induceDeepSleep() {
+            if (!confirm("Induce manual Deep Sleep cycle? This will temporarily pause responsiveness while weights are consolidated.")) {
+                return;
+            }
+            
+            fetch('/induce_sleep', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    console.log("Sleep induction response:", d);
+                    alert("Deep sleep cycle initiated. Monitor status in the Metabolic Status card.");
+                    requestHealthStats(false);
+                })
+                .catch(e => console.error("Failed to induce sleep:", e));
+        }
+
         function updateHealthData(data) {
             document.getElementById('last-check').textContent = new Date().toLocaleTimeString();
             
@@ -523,6 +598,31 @@
                 
                 setStatus('system-status', system.dashboard_status === 'Connected' ? 'healthy' : 'warning');
             }
+
+            // 6. Metabolic Status
+            if (data.metabolic) {
+                const metabolic = data.metabolic;
+                const modeEl = document.getElementById('sleep-mode');
+                const traceEl = document.getElementById('trace-count');
+                const progressEl = document.getElementById('trace-progress');
+                
+                if (metabolic.deep_sleep_active) {
+                    modeEl.textContent = 'DEEP SLEEP';
+                    modeEl.className = 'metric-value active-sleep';
+                    setStatus('metabolic-status', 'warning'); // Yellow for "busy"
+                } else {
+                    modeEl.textContent = 'Wake Cycle (Gathering)';
+                    modeEl.className = 'metric-value';
+                    setStatus('metabolic-status', 'healthy');
+                }
+                
+                const count = metabolic.pending_traces || 0;
+                const threshold = metabolic.trace_threshold || 50;
+                traceEl.textContent = `${count} / ${threshold}`;
+                
+                const percentage = Math.min(100, (count / threshold) * 100);
+                progressEl.style.width = `${percentage}%`;
+            }
             
             document.querySelector('.refresh-btn').classList.remove('loading');
             isRequestInProgress = false;
@@ -558,7 +658,8 @@
         }
         
         function initializeSocket() {
-            socket = io('http://localhost:5000', {
+            // Use relative URL for socket connection to support different ports/IPs
+            socket = io({
                 reconnectionDelay: 1000,
                 reconnection: true,
                 reconnectionAttempts: 10,

@@ -107,6 +107,11 @@ class ConsciousnessDashboard:
         self.neo4j_driver = None
         
     def setup_routes(self):
+        # System control routes
+        self.app.router.add_post('/clear_history', self.handle_clear_history)
+        self.app.router.add_post('/dream', self.handle_dream)
+        self.app.router.add_post('/induce_sleep', self.handle_induce_sleep)
+
         @self.sio.event
         async def connect(sid, environ):
             self.clients.add(sid)
@@ -529,6 +534,26 @@ class ConsciousnessDashboard:
                 }
                 health_data['system'] = system_data
                 
+                # 6. Metabolic Status (Deep Sleep)
+                metabolic_data = {
+                    'deep_sleep_active': self.consciousness.processing_lock.locked(),
+                    'pending_traces': 0,
+                    'trace_threshold': 50 # Default
+                }
+                
+                # Try to get accurate pending traces from the shadow_traces collection
+                try:
+                    from qdrant_client import QdrantClient
+                    client = QdrantClient(host=config.QDRANT_HOST, port=config.QDRANT_PORT)
+                    info = await asyncio.to_thread(client.get_collection, "shadow_traces")
+                    metabolic_data['pending_traces'] = info.points_count if info.points_count is not None else 0
+                except Exception as e:
+                    logger.debug(f"Could not get shadow_traces count: {e}")
+                    # Fallback to sum of points as proxy if specific collection fails
+                    metabolic_data['pending_traces'] = qdrant_data.get('memory_count', 0)
+                    
+                health_data['metabolic'] = metabolic_data
+                
                 # Send the health data
                 await self.sio.emit('health_stats', health_data, room=sid)
                 
@@ -570,10 +595,11 @@ class ConsciousnessDashboard:
             RETURN collect(DISTINCT {n: n1, r: r, m: n2}) as relationships
             """
             
-            # Query 3: Get hyperedges with members
+            # Query 3: Get hyperedges with members (Safely checking for label existence)
             hyperedges_query = """
-            MATCH (he:Hyperedge)
-            OPTIONAL MATCH (member:Concept)-[:MEMBER_OF]->(he)
+            MATCH (n) WHERE 'Hyperedge' IN labels(n)
+            WITH n as he
+            OPTIONAL MATCH (member:Concept)-[r:MEMBER_OF]->(he)
             WITH he, collect(DISTINCT member.name) as member_names
             RETURN collect({hyperedge: he, members: member_names}) as hyperedges
             """
@@ -1236,6 +1262,28 @@ class ConsciousnessDashboard:
 </body>
 </html>"""
     
+    async def handle_clear_history(self, request):
+        """Handle request to clear conversation history"""
+        self.consciousness.clear_conversation_history()
+        return web.json_response({'success': True, 'message': 'Conversation history cleared'})
+
+    async def handle_dream(self, request):
+        """Handle request to start a dream session"""
+        data = await request.json()
+        iterations = int(data.get('iterations', 3))
+        
+        # Start dream in background
+        asyncio.create_task(self.consciousness.dream(iterations))
+        
+        return web.json_response({'success': True, 'message': 'Dream session started'})
+
+    async def handle_induce_sleep(self, request):
+        """Handle request to manually induce deep sleep"""
+        # Start deep sleep in background
+        asyncio.create_task(self.consciousness.perform_deep_sleep())
+        
+        return web.json_response({'success': True, 'message': 'Deep sleep cycle initiated'})
+
     def get_scale_html(self):
         """Return the Scale Invariance visualization HTML as a string"""
         try:

@@ -724,6 +724,14 @@ class Neo4jSemanticHypergraphServer:
                     }
                 ),
                 Tool(
+                    name="initialize_riemannian_schema",
+                    description="Initialize Neo4j schema for Riemannian consolidation system",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {}
+                    }
+                ),
+                Tool(
                     name="cleanup_old_data",
                     description="Clean up old data based on age or size criteria",
                     inputSchema={
@@ -921,6 +929,8 @@ class Neo4jSemanticHypergraphServer:
                     result = await self.get_database_size(
                         arguments.get("include_breakdown", True)
                     )
+                elif name == "initialize_riemannian_schema":
+                    result = await self.initialize_riemannian_schema()
                 elif name == "cleanup_old_data":
                     result = await self.cleanup_old_data(
                         arguments.get("days_old", 30),
@@ -2763,6 +2773,33 @@ class Neo4jSemanticHypergraphServer:
                 return serialize_for_json({
                     "success": False,
                     "error": f"Failed to get database size: {str(e)}"
+                })
+
+    async def initialize_riemannian_schema(self) -> Dict[str, Any]:
+        """Initialize Neo4j schema for Riemannian consolidation system"""
+        async with self.driver.session() as session:
+            try:
+                # Initialize Concept nodes with Riemannian properties
+                query = """
+                MATCH (n:Concept)
+                SET n.basis_vectors = COALESCE(n.basis_vectors, []),
+                    n.singular_values = COALESCE(n.singular_values, []),
+                    n.embedding_centroid = COALESCE(n.embedding_centroid, []),
+                    n.last_sleep_update = COALESCE(n.last_sleep_update, 0)
+                RETURN count(n) as nodes_updated
+                """
+                result = await session.run(query)
+                record = await result.single()
+                
+                return serialize_for_json({
+                    "success": True,
+                    "message": "Riemannian schema initialized successfully",
+                    "nodes_updated": record["nodes_updated"]
+                })
+            except Exception as e:
+                return serialize_for_json({
+                    "success": False,
+                    "error": f"Failed to initialize schema: {str(e)}"
                 })
 
     async def cleanup_old_data(self, days_old: int = 30, keep_core_nodes: bool = True, 

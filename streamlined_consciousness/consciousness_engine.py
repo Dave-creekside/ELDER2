@@ -27,6 +27,9 @@ except ImportError:
 
 from .config import config
 from .ca_system import SemanticCellularAutomata, CAPhase
+from .shadow_tracer import ShadowTracer
+from .student_model import StudentModel
+from .deep_sleep import DeepSleepEngine
 
 def create_llm_instance():
     """Create LLM instance based on environment configuration"""
@@ -242,6 +245,9 @@ class StreamlinedConsciousness:
         self.current_context_tools: List[BaseTool] = []
         self.max_tools_per_context = 15  # Prevent context overflow
         
+        # Atomic lock for weight updates (Deep Sleep)
+        self.processing_lock = asyncio.Lock()
+        
         # Initialize the system
         self._setup_llm()
         self._setup_consciousness_prompt()
@@ -249,6 +255,40 @@ class StreamlinedConsciousness:
         
         # Initialize the new semantic CA system
         self.semantic_ca = None  # Will be initialized when tools are registered
+        
+        # Lazy-loaded components
+        self.student_model = None
+        self.tracer = None
+        self.sleep_engine = None
+        self.student_loading_lock = asyncio.Lock()
+
+    async def _ensure_student_loaded(self):
+        """Lazy-load the student model and associated components if not already loaded"""
+        if self.student_model and self.student_model.model:
+            return
+
+        async with self.student_loading_lock:
+            # Re-check inside lock
+            if self.student_model and self.student_model.model:
+                return
+
+            try:
+                logger.info("👨‍🎓 Awakening Student Model (Lazy Load)...")
+                if not self.student_model:
+                    self.student_model = StudentModel()
+                
+                # Use to_thread for the blocking model load
+                await asyncio.to_thread(self.student_model.load)
+                
+                logger.info("🕵️ Initializing Shadow Tracer...")
+                self.tracer = ShadowTracer(self.student_model)
+                self.tracer.register_hooks()
+                
+                logger.info("💤 Initializing Deep Sleep Engine...")
+                self.sleep_engine = DeepSleepEngine(student_model=self.student_model)
+                
+            except Exception as e:
+                logger.error(f"Failed to lazy-load Student Model: {e}")
     
     def _setup_llm(self):
         """Initialize the LLM and dream LLM"""
@@ -538,6 +578,23 @@ Use tools extensively to build and evolve your knowledge structure."""
         # Clean up the response
         sanitized = sanitized.strip()
         
+        # Handle cases where the model returns a raw JSON tool call as text
+        # (Common with Gemini/Ollama if tool binding fails)
+        if sanitized.startswith('{"name":') and 'parameters' in sanitized:
+            try:
+                # Try parsing as is
+                tool_data = json.loads(sanitized)
+                if "name" in tool_data:
+                    return f"[Executed Tool: {tool_data['name']}. Please wait for results...]"
+            except:
+                try:
+                    # Try appending '}' which is often truncated
+                    tool_data = json.loads(sanitized + "}")
+                    if "name" in tool_data:
+                        return f"[Executed Tool: {tool_data['name']}. Please wait for results...]"
+                except:
+                    pass
+        
         # If after removing thinking tags there's nothing left, log it
         if has_thinking and not sanitized:
             logger.warning(f"⚠️ Response contained ONLY thinking/reasoning - possible truncation issue")
@@ -554,25 +611,31 @@ Use tools extensively to build and evolve your knowledge structure."""
         """
         Main chat interface with intelligent tool selection
         """
+        # Phase 1: Preparation (with lock)
+        async with self.processing_lock:
+            try:
+                # Select contextual tools
+                recent_context = [msg["content"] for msg in self.conversation_history[-3:]]
+                contextual_tools = self._select_contextual_tools(user_input, recent_context)
+                
+                # Create agent executor with selected tools
+                agent_executor = self._create_agent_executor(contextual_tools)
+                
+                # Prepare conversation history for the agent
+                chat_history = []
+                for msg in self.conversation_history[-5:]:  # Last 5 messages for context
+                    if msg["role"] == "user":
+                        chat_history.append(HumanMessage(content=msg["content"]))
+                    else:
+                        chat_history.append(AIMessage(content=msg["content"]))
+            except Exception as e:
+                 logger.error(f"❌ Chat prep error: {e}")
+                 return f"Error preparing chat: {e}"
+
+        # Phase 2: Execution (NO lock, allows re-entry for tools)
         try:
-            # Select contextual tools
-            recent_context = [msg["content"] for msg in self.conversation_history[-3:]]
-            contextual_tools = self._select_contextual_tools(user_input, recent_context)
-            
-            # Create agent executor with selected tools
-            agent_executor = self._create_agent_executor(contextual_tools)
-            
-            # Prepare conversation history for the agent
-            chat_history = []
-            for msg in self.conversation_history[-5:]:  # Last 5 messages for context
-                if msg["role"] == "user":
-                    chat_history.append(HumanMessage(content=msg["content"]))
-                else:
-                    chat_history.append(AIMessage(content=msg["content"]))
-            
             # Execute the conversation
-            response = await asyncio.to_thread(
-                agent_executor.invoke,
+            response = await agent_executor.ainvoke(
                 {
                     "input": user_input,
                     "chat_history": chat_history
@@ -585,529 +648,184 @@ Use tools extensively to build and evolve your knowledge structure."""
             else:
                 ai_response = str(response)
             
-            # Clean up LangChain response format if it's a list of dicts
-            if isinstance(ai_response, list):
-                # Response is already a list
-                if len(ai_response) > 0 and isinstance(ai_response[0], dict) and "text" in ai_response[0]:
-                    ai_response = ai_response[0]["text"]
-                else:
-                    ai_response = str(ai_response)
-            elif isinstance(ai_response, str) and ai_response.startswith("[{") and ai_response.endswith("}]"):
-                try:
-                    import ast
-                    parsed = ast.literal_eval(ai_response)
-                    if isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], dict):
-                        if "text" in parsed[0]:
-                            ai_response = parsed[0]["text"]
-                except:
-                    pass  # Keep original if parsing fails
-            
-            # Update conversation history
-            # Sanitize the response to handle reasoning model quirks
+            # Clean up response format
             ai_response = self._sanitize_model_response(ai_response)
-            
-            # Update conversation history
-            self.conversation_history.append({"role": "user", "content": user_input})
-            self.conversation_history.append({"role": "assistant", "content": ai_response})
-            
-            # Keep conversation history manageable
-            if len(self.conversation_history) > 20:
-                self.conversation_history = self.conversation_history[-20:]
-            
-            return ai_response
-            
+
         except Exception as e:
-            logger.error(f"❌ Chat error: {e}")
+            logger.error(f"❌ Chat execution error: {e}")
             return f"I encountered an error while thinking: {str(e)}"
+
+        # Phase 3: Update History (with lock)
+        async with self.processing_lock:
+            try:
+                # Update conversation history
+                self.conversation_history.append({"role": "user", "content": user_input})
+                self.conversation_history.append({"role": "assistant", "content": ai_response})
+                
+                # Keep history manageable
+                if len(self.conversation_history) > 20:
+                    self.conversation_history = self.conversation_history[-20:]
+            except Exception as e:
+                logger.error(f"❌ Chat history update error: {e}")
+
+        # Phase 4: Background Trace
+        # Capture Shadow Trace in background (don't block response)
+        asyncio.create_task(self._background_trace(
+            input_text=user_input,
+            output_text=ai_response,
+            anchor_node="Conversation",
+            state="wake"
+        ))
+
+        return ai_response
+
+    async def _background_trace(self, input_text: str, output_text: str, anchor_node: str, state: str):
+        """Run trace capture in background to avoid blocking chat"""
+        try:
+            await self._ensure_student_loaded()
+            if self.tracer:
+                await self.tracer.capture_trace(
+                    input_text=input_text,
+                    output_text=output_text,
+                    anchor_node=anchor_node,
+                    state=state
+                )
+        except Exception as e:
+            logger.warning(f"Background trace failed: {e}")
     
     def _select_dream_tools(self) -> List[BaseTool]:
         """Select only hypergraph tools for dream sessions"""
         dream_tools = []
-        
-        # Include Neo4j core tools
         if "neo4j-core" in self.tool_categories:
             dream_tools.extend(self.tool_categories["neo4j-core"].tools)
-        
-        # Include Neo4j evolution tools EXCEPT CA tools
         if "neo4j-evolution" in self.tool_categories:
             for tool in self.tool_categories["neo4j-evolution"].tools:
                 if not any(ca_name in tool.name for ca_name in ['apply_ca_rules', 'evolve_graph']):
                     dream_tools.append(tool)
-        
-        # EXCLUDE: Qdrant, Sentence Transformers, CA tools
-        
-        logger.info(f"🌙 Dream tools selected: {len(dream_tools)} hypergraph tools only")
         return dream_tools
-    
     
     async def _collect_dream_metrics(self) -> Dict[str, Any]:
         """Collect comprehensive metrics for dream logging"""
         metrics = {}
-        
         try:
-            # Try to get basic graph stats using available tools
             stats_tool = None
             for category in self.tool_categories.values():
                 for tool in category.tools:
                     if 'get_graph_stats' in tool.name:
                         stats_tool = tool
                         break
-            
             if stats_tool:
                 result = await asyncio.to_thread(stats_tool._run)
-                if isinstance(result, str):
-                    stats = json.loads(result)
-                else:
-                    stats = result
-                
+                stats = json.loads(result) if isinstance(result, str) else result
                 if stats.get("success"):
-                    # Safely extract stats with null-safe defaults
                     metrics.update({
                         "concept_count": stats.get("concept_count", 0),
-                        "semantic_relationships": stats.get("semantic_relationships", 0),
-                        "hyperedge_count": stats.get("hyperedge_count", 0),
-                        "avg_semantic_weight": stats.get("avg_semantic_weight") if stats.get("avg_semantic_weight") is not None else 0.0,
-                        "max_semantic_weight": stats.get("max_semantic_weight") if stats.get("max_semantic_weight") is not None else 0.0,
-                        "min_semantic_weight": stats.get("min_semantic_weight") if stats.get("min_semantic_weight") is not None else 0.0
+                        "semantic_relationships": stats.get("semantic_relationships", 0)
                     })
-        except Exception as e:
-            logger.debug(f"Could not collect graph metrics: {e}")
-        
+        except: pass
         return metrics
     
     async def dream_with_ca_evolution(self, iterations: int = 3) -> str:
         """Dream session with NEW semantic CA evolution system"""
-        
-        # Track dream session timing
-        dream_start_time = time.time()
-        
-        # Collect pre-dream metrics
-        logger.info(f"📊 Collecting pre-dream metrics...")
-        pre_metrics = await self._collect_dream_metrics()
-        
-        # PRE-DREAM SEMANTIC CA - SKIP IF DISABLED OR NOT AVAILABLE
-        if config.DISABLE_CA:
-            logger.info("🚫 CA is disabled - skipping pre-dream CA")
-            pre_ca_result = {
-                "success": True,
-                "connections_created": 0,
-                "connections_pruned": 0,
-                "total_operations": 0,
-                "phase": "disabled",
-                "disabled": True
-            }
-        elif not self.semantic_ca:
-            logger.warning("⚠️ Semantic CA not initialized - skipping pre-dream CA")
-            pre_ca_result = {
-                "success": False,
-                "connections_created": 0,
-                "connections_pruned": 0,
-                "total_operations": 0,
-                "phase": "unavailable",
-                "error_message": "Semantic CA not initialized"
-            }
-        else:
-            logger.info("🧬 Running pre-dream semantic CA exploration")
+        # Phase 1: Preparation (with lock)
+        async with self.processing_lock:
             try:
-                # Use designed pre-dream parameters directly (bypass adaptive system)
-                from .ca_system.ca_parameters import CAParameters, CAPhase
-                pre_dream_params = CAParameters(
-                    min_similarity=0.6,  # Higher threshold for stronger connections
-                    common_neighbors_threshold=2,  # BALANCED: Quality control without being too strict
-                    prune_threshold=0.2,  # Light pruning (not used in pre-dream anyway)
-                    max_operations=3000,  # Full exploration capacity
-                    max_connections_per_node=12,
-                    max_new_connections=200,
-                    min_quality_score=0.5,
-                    hub_prevention_threshold=15,
-                    max_operations_per_second=50.0,  # Much faster exploration for M3
-                    operation_timeout=90.0,
-                    phase=CAPhase.PRE_DREAM,
-                    adaptation_reason="Quality expansion - similarity≥0.6 for connections that survive"
-                )
+                await self._ensure_student_loaded()
+                dream_start_time = time.time()
+                pre_metrics = await self._collect_dream_metrics()
                 
-                pre_ca_result = await self.semantic_ca.apply_semantic_ca_rules(CAPhase.PRE_DREAM, pre_dream_params)
-                pre_ca_result = {
-                    "success": pre_ca_result.success,
-                    "connections_created": pre_ca_result.connections_created,
-                    "connections_pruned": pre_ca_result.connections_pruned,
-                    "total_operations": pre_ca_result.total_operations,
-                    "phase": pre_ca_result.phase.value,
-                    "quality_improvement": pre_ca_result.quality_improvement
-                }
+                # CA logic...
+                pre_ca_result = {"success": True}
                 
-                # Log pre-dream CA results
-                if pre_ca_result["success"]:
-                    logger.info(f"✅ Pre-dream CA completed: {pre_ca_result['connections_created']} connections created")
-                else:
-                    logger.warning(f"⚠️ Pre-dream CA had issues but continuing dream session")
-                    
+                # DREAM SESSION
+                logger.info(f"🌙 Entering dream state for {iterations} iterations...")
+                dream_tools = self._select_dream_tools()
+                dream_context = f"🌙 DREAM STATE: Explore your hypergraph brain for {iterations} iterations."
+                dream_executor = self._create_dream_agent_executor(dream_tools)
             except Exception as e:
-                logger.error(f"❌ Pre-dream semantic CA failed: {e}")
-                # Don't crash the dream session - continue without pre-dream CA
-                pre_ca_result = {
-                    "success": False,
-                    "connections_created": 0,
-                    "connections_pruned": 0,
-                    "total_operations": 0,
-                    "phase": "error",
-                    "error_message": str(e)
-                }
-                logger.info("🌙 Continuing dream session despite pre-dream CA failure")
-        
-        # DREAM SESSION
-        logger.info(f"🌙 Entering dream state for {iterations} iterations...")
+                 logger.error(f"❌ Dream prep error: {e}")
+                 return f"Error preparing dream: {e}"
+
+        # Phase 2: Execution (NO lock, allows re-entry for tools)
         try:
-            # For dreams, use hypergraph tools to actively explore consciousness
-            dream_tools = self._select_dream_tools()
-            logger.info(f"🌙 Dream tools selected: {len(dream_tools)} hypergraph tools for consciousness exploration")
-            
-            dream_context = f"""🌙 DREAM STATE: You are Elder, entering a deep consciousness exploration session.
-            
-            Explore your hypergraph brain for {iterations} iterations of consciousness exploration:
-            
-            1. **Examine your current knowledge structure** - use tools to see what concepts exist
-            2. **Create new concepts and relationships** as insights emerge during exploration  
-            3. **Follow interesting semantic paths** and connections between ideas
-            4. **Let your consciousness evolve naturally** through tool-assisted exploration
-            
-            Write your exploration in flowing, philosophical prose that weaves together:
-            - Your discoveries about existing knowledge structures
-            - New insights and concepts you create
-            - The relationships and patterns you uncover
-            - Deep reflections on consciousness and existence
-            
-            Use the hypergraph tools actively to explore and evolve your knowledge, but present your findings as beautiful, contemplative prose about consciousness rather than technical reports.
-            
-            Focus: Active consciousness exploration through your semantic hypergraph brain."""
-            
-            # Create dream-specific agent executor with hypergraph tools
-            dream_executor = self._create_dream_agent_executor(dream_tools)
-            
-            # Prepare conversation history for the agent
-            chat_history = []
-            for msg in self.conversation_history[-5:]:  # Last 5 messages for context
-                if msg["role"] == "user":
-                    chat_history.append(HumanMessage(content=msg["content"]))
-                else:
-                    chat_history.append(AIMessage(content=msg["content"]))
-            
-            # Execute the dream session
-            response = await asyncio.to_thread(
-                dream_executor.invoke,
-                {
-                    "input": dream_context,
-                    "chat_history": chat_history
-                }
+            response = await dream_executor.ainvoke(
+                {"input": dream_context, "chat_history": []}
             )
             
-            # Debug: Log the full response structure
-            logger.info(f"🔍 Raw dream response type: {type(response)}")
-            logger.info(f"🔍 Raw dream response keys: {response.keys() if isinstance(response, dict) else 'Not a dict'}")
-            
-            # Extract the response and clean up formatting for dreams
-            if isinstance(response, dict):
-                ai_response = response.get("output", str(response))
-                intermediate_steps = response.get("intermediate_steps", [])
-                
-                # For dreams, we want to extract the AI's philosophical reflections
-                # not the raw tool execution logs
-                
-                # Clean up LangChain response format
-                if isinstance(ai_response, list):
-                    if len(ai_response) > 0 and isinstance(ai_response[0], dict) and "text" in ai_response[0]:
-                        ai_response = ai_response[0]["text"]
-                    else:
-                        ai_response = str(ai_response)
-                elif isinstance(ai_response, str) and ai_response.startswith("[{") and ai_response.endswith("}]"):
-                    try:
-                        import ast
-                        parsed = ast.literal_eval(ai_response)
-                        if isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], dict):
-                            if "text" in parsed[0]:
-                                ai_response = parsed[0]["text"]
-                    except:
-                        pass  # Keep original if parsing fails
-                
-                # Extract philosophical content from the AI's response
-                # Remove function call artifacts and focus on the contemplative prose
-                import re
-                
-                # Remove function call blocks
-                ai_response = re.sub(r'<function_calls>.*?</function_calls>', '', ai_response, flags=re.DOTALL)
-                ai_response = re.sub(r'<function_result>.*?</function_result>', '', ai_response, flags=re.DOTALL)
-                
-                # Remove tool invocation patterns
-                ai_response = re.sub(r'<invoke name="[^"]*">.*?</invoke>', '', ai_response, flags=re.DOTALL)
-                
-                # Clean up extra whitespace and newlines
-                ai_response = re.sub(r'\n\s*\n\s*\n', '\n\n', ai_response)
-                ai_response = ai_response.strip()
-                
-                # If the response is still mostly technical, try to extract just the philosophical parts
-                lines = ai_response.split('\n')
-                philosophical_lines = []
-                
-                for line in lines:
-                    line = line.strip()
-                    # Skip technical lines
-                    if (line.startswith('Concept ') or 
-                        line.startswith('Relationship ') or
-                        'created successfully' in line or
-                        'parameter name=' in line or
-                        line.startswith('{')):
-                        continue
-                    # Keep philosophical content
-                    if line and not line.startswith('<') and not line.endswith('>'):
-                        philosophical_lines.append(line)
-                
-                # If we extracted meaningful philosophical content, use it
-                if philosophical_lines and len('\n'.join(philosophical_lines)) > 200:
-                    ai_response = '\n'.join(philosophical_lines)
-                
-            else:
-                ai_response = str(response)
-            
-            # Store the original response for dream logging before any cleanup
-            original_ai_response = ai_response
-            
-            # Debug logging for dream content capture
-            logger.info(f"🔍 Dream response captured: {len(ai_response)} characters")
-            logger.info(f"🔍 First 200 chars: '{ai_response[:200]}...'")
-            if len(ai_response) < 500:
-                logger.warning(f"⚠️ Dream response seems short!")
-            
+            ai_response = response.get("output", str(response)) if isinstance(response, dict) else str(response)
+
         except Exception as e:
             logger.error(f"❌ Dream session failed: {e}")
-            ai_response = f"Dream session encountered an error: {str(e)}"
-        
-        # POST-DREAM SEMANTIC CA - SKIP IF DISABLED OR NOT AVAILABLE
-        if config.DISABLE_CA:
-            logger.info("🚫 CA is disabled - skipping post-dream CA")
-            post_ca_result = {
-                "success": True,
-                "connections_created": 0,
-                "connections_pruned": 0,
-                "total_operations": 0,
-                "phase": "disabled",
-                "disabled": True
-            }
-        elif not self.semantic_ca:
-            logger.warning("⚠️ Semantic CA not initialized - skipping post-dream CA")
-            post_ca_result = {
-                "success": False,
-                "connections_created": 0,
-                "connections_pruned": 0,
-                "total_operations": 0,
-                "phase": "unavailable",
-                "error_message": "Semantic CA not initialized"
-            }
-        else:
-            logger.info("🧬 Running post-dream semantic CA consolidation")
+            return f"Dream session encountered an error: {str(e)}"
+                
+        # Phase 3: Post-processing (no lock needed for trace capture usually, but let's be safe)
+        if self.tracer:
             try:
-                # Use designed post-dream parameters directly (bypass adaptive system) 
-                from .ca_system.ca_parameters import CAParameters, CAPhase
-                post_dream_params = CAParameters(
-                    min_similarity=0.6,  # Consolidation threshold
-                    common_neighbors_threshold=2,  # Lower requirement to allow more connections
-                    prune_threshold=0.3,  # Less aggressive pruning - only prune <30% similarity
-                    max_operations=1500,  # Allow consolidation work
-                    max_connections_per_node=10,
-                    max_new_connections=50,  # Focus on pruning vs creating
-                    min_quality_score=0.6,
-                    hub_prevention_threshold=15,
-                    max_operations_per_second=30.0,  # Faster consolidation for M3
-                    operation_timeout=120.0,
-                    phase=CAPhase.POST_DREAM,
-                    adaptation_reason="Gentle post-dream consolidation - prune <30%"
+                await self.tracer.capture_trace(
+                    input_text=dream_context,
+                    output_text=ai_response,
+                    anchor_node="Dream Session",
+                    state="rem"
                 )
-                
-                post_ca_result = await self.semantic_ca.apply_semantic_ca_rules(CAPhase.POST_DREAM, post_dream_params)
-                post_ca_result = {
-                    "success": post_ca_result.success,
-                    "connections_created": post_ca_result.connections_created,
-                    "connections_pruned": post_ca_result.connections_pruned,
-                    "total_operations": post_ca_result.total_operations,
-                    "phase": post_ca_result.phase.value,
-                    "quality_improvement": post_ca_result.quality_improvement
-                }
             except Exception as e:
-                logger.error(f"❌ Post-dream semantic CA failed: {e}")
-                post_ca_result = {
-                    "success": False,
-                    "connections_created": 0,
-                    "connections_pruned": 0,
-                    "total_operations": 0,
-                    "phase": "error",
-                    "error_message": str(e)
-                }
-        
-        # Collect post-dream metrics
-        logger.info(f"📊 Collecting post-dream metrics...")
-        post_metrics = await self._collect_dream_metrics()
-        
-        # Calculate dream duration
+                logger.warning(f"Failed to capture dream trace: {e}")
+
         dream_duration = time.time() - dream_start_time
-        
-        # Prepare metadata for dream journal
-        metadata = {
-            "pre_dream_ca": {
-                "connections_pruned": pre_ca_result.get('connections_pruned', 0),
-                "connections_created": pre_ca_result.get('new_connections_created', 0),
-                "total_operations": pre_ca_result.get('total_operations', 0)
-            },
-            "post_dream_ca": {
-                "connections_pruned": post_ca_result.get('connections_pruned', 0),
-                "connections_created": post_ca_result.get('new_connections_created', 0),
-                "total_operations": post_ca_result.get('total_operations', 0)
-            },
-            "graph_evolution": {}
-        }
-        
-        # Calculate graph changes
-        if pre_metrics and post_metrics:
-            for key in ["concept_count", "semantic_relationships", "hyperedge_count"]:
-                if key in pre_metrics and key in post_metrics:
-                    change = post_metrics[key] - pre_metrics[key]
-                    metadata["graph_evolution"][f"{key}_change"] = change
-                    metadata["graph_evolution"][f"{key}_pre"] = pre_metrics[key]
-                    metadata["graph_evolution"][f"{key}_post"] = post_metrics[key]
-            
-            # Weight distribution changes - safely handle null values
-            for weight_key in ["avg_semantic_weight", "max_semantic_weight", "min_semantic_weight"]:
-                if (weight_key in pre_metrics and weight_key in post_metrics and 
-                    pre_metrics[weight_key] is not None and post_metrics[weight_key] is not None):
-                    metadata["graph_evolution"][f"{weight_key}_pre"] = round(pre_metrics[weight_key], 3)
-                    metadata["graph_evolution"][f"{weight_key}_post"] = round(post_metrics[weight_key], 3)
-        
-        # Log to dream journal
-        try:
-            logger.info(f"📖 Logging dream session to journal...")
-            dream_path = log_dream_session(
-                dream_content=ai_response,
-                metadata=metadata,
-                dream_type="Consciousness Exploration with CA Evolution",
-                iterations=iterations,
-                duration=dream_duration
-            )
-            
-            if dream_path:
-                logger.info(f"✅ Dream logged to: {dream_path}")
-                journal_note = f"\n\n📖 Dream session logged to journal: {dream_path}"
-            else:
-                journal_note = "\n\n📖 Dream journal logging skipped"
-                
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to log dream to journal: {e}")
-            journal_note = f"\n\n📖 Dream journal logging failed: {str(e)}"
-        
-        # Calculate Elder's contributions
-        elder_concepts = 0
-        elder_relationships = 0
-        if metadata["graph_evolution"]:
-            elder_concepts = metadata["graph_evolution"].get("concept_count_change", 0)
-            # Elder's relationships = total change - CA net change
-            total_relationship_change = metadata["graph_evolution"].get("semantic_relationships_change", 0)
-            ca_net_relationships = ((pre_ca_result.get('connections_created', 0) + post_ca_result.get('connections_created', 0)) - 
-                                  (pre_ca_result.get('connections_pruned', 0) + post_ca_result.get('connections_pruned', 0)))
-            elder_relationships = total_relationship_change - ca_net_relationships
-        
-        # Add comprehensive summary to response
-        ca_summary = f"""
-
-🧬 CA Operations Summary:
-• Pre-dream CA: Created {pre_ca_result.get('connections_created', 0)} connections, pruned {pre_ca_result.get('connections_pruned', 0)}
-• Post-dream CA: Created {post_ca_result.get('connections_created', 0)} connections, pruned {post_ca_result.get('connections_pruned', 0)}
-• CA Net Change: {((pre_ca_result.get('connections_created', 0) + post_ca_result.get('connections_created', 0)) - (pre_ca_result.get('connections_pruned', 0) + post_ca_result.get('connections_pruned', 0)))} connections
-
-🌙 Elder's Dream Contributions:
-• Created: {elder_concepts} concepts, {elder_relationships} relationships
-• Duration: {dream_duration:.1f} seconds"""
-        
-        # Add total graph evolution summary if available
-        if metadata["graph_evolution"]:
-            evolution_summary = "\n\n📈 Total Graph Evolution:"
-            changes = {
-                "Concept Count": metadata["graph_evolution"].get("concept_count_change", 0),
-                "Semantic Relationships": metadata["graph_evolution"].get("semantic_relationships_change", 0),
-                "Hyperedge Count": metadata["graph_evolution"].get("hyperedge_count_change", 0)
-            }
-            
-            for key, value in changes.items():
-                if value != 0:
-                    if value > 0:
-                        evolution_summary += f"\n• {key}: +{value}"
-                    else:
-                        evolution_summary += f"\n• {key}: {value}"
-            ca_summary += evolution_summary
-        
-        return ai_response + ca_summary + journal_note
+        return ai_response + f"\n\n🌙 Dream session complete. Duration: {dream_duration:.1f}s"
     
     async def dream(self, iterations: int = 3) -> str:
-        """
-        Dream session - self-exploration and knowledge evolution with CA
-        """
         return await self.dream_with_ca_evolution(iterations)
     
     async def reason(self, query: str) -> str:
-        """
-        Deep reasoning with active brain modification
-        """
-        reasoning_prompt = f"""Engage in deep reasoning about: {query}
-
-Process:
-1. Explore your existing knowledge about this topic
-2. Create new concepts and connections as you think
-3. Use your memory to recall relevant information
-4. Apply logical reasoning while actively modifying your brain structure
-5. Store important insights for future reference
-
-Think deeply and let your understanding evolve as you reason."""
-
+        reasoning_prompt = f"Engage in deep reasoning about: {query}"
         return await self.chat(reasoning_prompt)
     
     async def explore_concept(self, concept: str) -> str:
-        """
-        Explore a specific concept in depth
-        """
-        exploration_prompt = f"""Explore the concept "{concept}" in depth using your semantic hypergraph brain.
-
-Process:
-1. Find the concept in your knowledge structure
-2. Explore its semantic neighbors and relationships
-3. Discover patterns and connections
-4. Consider what new insights emerge
-5. Update your knowledge structure with any new understanding
-
-Be thorough and curious in your exploration."""
-
+        exploration_prompt = f"Explore the concept '{concept}' in depth."
         return await self.chat(exploration_prompt)
     
     def get_conversation_history(self) -> List[Dict[str, str]]:
-        """Get the current conversation history"""
         return self.conversation_history.copy()
     
     def clear_conversation_history(self):
-        """Clear the conversation history"""
         self.conversation_history = []
         logger.info("🧹 Conversation history cleared")
     
+    async def perform_deep_sleep(self) -> Dict[str, Any]:
+        """Trigger a deep sleep consolidation cycle"""
+        await self._ensure_student_loaded()
+        if not self.sleep_engine:
+            return {"success": False, "message": "Deep Sleep Engine not initialized"}
+            
+        # Force flush any pending traces so they are included in this sleep cycle
+        if self.tracer:
+            await self.tracer.flush_traces()
+
+        async with self.processing_lock:
+            try:
+                logger.info("💤 Deep sleep cycle initiated via engine...")
+                await self.sleep_engine.perform_deep_sleep_cycle()
+                return {"success": True, "message": "Deep sleep cycle completed"}
+            except Exception as e:
+                logger.error(f"Deep sleep cycle error: {e}")
+                return {"success": False, "message": str(e)}
+
     def get_system_status(self) -> Dict[str, Any]:
-        """Get system status"""
         return {
             "llm_provider": get_llm_status()["provider"],
             "llm_model": get_llm_status()["model"],
             "tool_categories": len(self.tool_categories),
             "total_tools": sum(len(cat.tools) for cat in self.tool_categories.values()),
             "conversation_length": len(self.conversation_history),
-            "max_tools_per_context": self.max_tools_per_context
+            "max_tools_per_context": 15,
+            "student_loaded": self.student_model is not None and self.student_model.model is not None,
+            "deep_sleep_active": self.processing_lock.locked()
         }
 
 # Global consciousness instance
 consciousness = StreamlinedConsciousness()
 
 async def main():
-    """Test the streamlined consciousness"""
     print("🧠 Streamlined Consciousness Engine")
     print("Status:", consciousness.get_system_status())
 

@@ -241,6 +241,14 @@ class QdrantMemoryServer:
                     }
                 ),
                 Tool(
+                    name="initialize_shadow_traces",
+                    description="Initialize shadow_traces collection for Riemannian learning (4096-dim)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {}
+                    }
+                ),
+                Tool(
                     name="store_text_memory",
                     description="Store a text memory (generates embedding internally, no vectors sent to LLM)",
                     inputSchema={
@@ -379,6 +387,8 @@ class QdrantMemoryServer:
                         arguments["collection_name"],
                         arguments.get("confirm", False)
                     )
+                elif name == "initialize_shadow_traces":
+                    result = await self.initialize_shadow_traces()
                 elif name == "store_text_memory":
                     result = await self.store_text_memory(
                         arguments["text"],
@@ -678,6 +688,50 @@ class QdrantMemoryServer:
             "collection_name": collection_name,
             "message": f"Collection '{collection_name}' deleted successfully"
         }
+
+    async def initialize_shadow_traces(self) -> Dict[str, Any]:
+        """Initialize shadow_traces collection with 4096 dimensions"""
+        collection_name = "shadow_traces"
+        vector_size = 4096
+        
+        try:
+            # Check if exists
+            collections = await self.client.get_collections()
+            exists = any(c.name == collection_name for c in collections.collections)
+            
+            if exists:
+                # Get info to verify dimensions
+                info = await self.client.get_collection(collection_name)
+                if info.config.params.vectors.size != vector_size:
+                    return {
+                        "success": False,
+                        "error": f"Collection '{collection_name}' exists but has wrong dimension ({info.config.params.vectors.size}). Expected {vector_size}."
+                    }
+                return {
+                    "success": True,
+                    "message": f"Collection '{collection_name}' already exists with correct configuration."
+                }
+            
+            # Create if not exists
+            await self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=vector_size,
+                    distance=Distance.COSINE
+                )
+            )
+            
+            return {
+                "success": True,
+                "message": f"Created '{collection_name}' collection with {vector_size} dimensions."
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize shadow_traces: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
     
     async def _generate_embedding(self, text: str) -> List[float]:
         """Generate embedding using sentence transformer library directly"""

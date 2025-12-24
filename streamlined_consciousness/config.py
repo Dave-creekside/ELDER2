@@ -86,6 +86,11 @@ class Config:
     # Debugging Configuration
     DISABLE_CA = os.getenv('DISABLE_CA', 'false').lower() == 'true'
 
+    # Student Model (Local Learner) Configuration
+    STUDENT_MODEL_ID = os.getenv('STUDENT_MODEL_ID', 'unsloth/gemma-3-4b-it')
+    LORA_RANK = int(os.getenv('LORA_RANK', 32))
+    LORA_ALPHA = int(os.getenv('LORA_ALPHA', 64))
+
     @staticmethod
     def validate():
         """Validate required configurations"""

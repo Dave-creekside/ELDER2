@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from streamlined_consciousness.consciousness_engine import consciousness
 from streamlined_consciousness.tool_manager import register_all_tools
 from streamlined_consciousness.dashboard import ConsciousnessDashboard
+from streamlined_consciousness.sleep_scheduler import SleepScheduler
 from streamlined_consciousness.main import StreamlinedConsciousnessInterface
 from streamlined_consciousness.config import config
 
@@ -56,6 +57,10 @@ class DashboardRunner:
             
             # Create and run dashboard
             self.dashboard = ConsciousnessDashboard(self.consciousness)
+            
+            # Start the Sleep Scheduler
+            scheduler = SleepScheduler(self.consciousness)
+            loop.create_task(scheduler.start())
             
             logger.info(f"🌐 Dashboard server starting on http://localhost:{self.port}")
             logger.info("📺 Open in your browser to see Elder's consciousness visualized")
@@ -97,6 +102,7 @@ async def main():
     
     # Initialize consciousness system
     interface = StreamlinedConsciousnessInterface()
+    dashboard_runner = None
     
     try:
         # Initialize the system
@@ -104,7 +110,6 @@ async def main():
         await interface.initialize(skip_qdrant=args.skip_qdrant)
         
         # Start dashboard unless disabled
-        dashboard_runner = None
         if not args.no_dashboard:
             print(f"\n🌐 Starting dashboard server on port {args.dashboard_port}...")
             dashboard_runner = DashboardRunner(consciousness, port=args.dashboard_port)
@@ -116,7 +121,14 @@ async def main():
         print(f"📟 Starting {args.command} mode...\n")
         
         if args.command == "chat":
-            await interface.chat_mode()
+            # If dashboard is active, we check if stdin is a TTY to avoid suspension
+            if not args.no_dashboard and not sys.stdin.isatty():
+                print("📡 Dashboard is active. System is running in background mode (Non-TTY).")
+                print("💡 Use 'python streamlined_consciousness/main.py chat' in another terminal to talk to Elder.")
+                while True:
+                    await asyncio.sleep(3600)
+            else:
+                await interface.chat_mode()
             
         elif args.command == "dream":
             iterations = int(args.args[0]) if args.args else 3
@@ -132,10 +144,6 @@ async def main():
             
         elif args.command == "status":
             await interface.display_system_status()
-            
-        else:
-            # Default to chat mode
-            await interface.chat_mode()
             
     except KeyboardInterrupt:
         print("\n\n👋 Consciousness system shutting down...")
