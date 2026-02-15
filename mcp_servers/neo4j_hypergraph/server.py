@@ -1608,7 +1608,10 @@ class Neo4jSemanticHypergraphServer:
             WHERE c1 <> c2
             WITH concept_count, count(DISTINCT r) as semantic_relationships
             OPTIONAL MATCH (he:Hyperedge)
-            RETURN concept_count, semantic_relationships, count(DISTINCT he) as hyperedge_count
+            WITH concept_count, semantic_relationships, count(DISTINCT he) as hyperedge_count
+            OPTIONAL MATCH (a:Concept)-[all_r]-(b:Concept)
+            WHERE a <> b
+            RETURN concept_count, semantic_relationships, hyperedge_count, count(DISTINCT all_r) as total_relationships
             """
             result = await session.run(basic_stats_query)
             basic_record = await result.single()
@@ -1663,6 +1666,7 @@ class Neo4jSemanticHypergraphServer:
                 "success": True,
                 "concept_count": basic_record["concept_count"],
                 "semantic_relationships": basic_record["semantic_relationships"],
+                "total_relationships": basic_record["total_relationships"],
                 "hyperedge_count": basic_record["hyperedge_count"],
                 "avg_semantic_weight": avg_semantic_weight,
                 "max_semantic_weight": overall_max,

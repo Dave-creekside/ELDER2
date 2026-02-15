@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+!/usr/bin/env python3
 """
 Elder Consciousness Dashboard Server
 Real-time visualization of consciousness evolution
@@ -55,6 +55,9 @@ class ConsciousnessDashboard:
         async def student(request):
             return web.Response(text=self.get_student_html(), content_type='text/html')
         
+        async def mobile(request):
+            return web.Response(text=self.get_mobile_html(), content_type='text/html')
+        
         self.app.router.add_get('/', index)
         self.app.router.add_get('/dashboard', dashboard_legacy)
         self.app.router.add_get('/galaxy', galaxy)
@@ -63,6 +66,7 @@ class ConsciousnessDashboard:
         self.app.router.add_get('/matrix', matrix)
         self.app.router.add_get('/scale', scale)
         self.app.router.add_get('/student', student)
+        self.app.router.add_get('/mobile', mobile)
         
         # Serve individual HTML files for the unified dashboard to load
         async def serve_html(request):
@@ -347,15 +351,16 @@ class ConsciousnessDashboard:
                     for category in self.consciousness.tool_categories.values():
                         for tool in category.tools:
                             all_tool_names.append(tool.name)
-                            # Match exact tool names from the Neo4j server (note: underscore not hyphen)
-                            if tool.name == 'neo4j_hypergraph_get_graph_stats':
+                            # Match tool names robustly (use 'in' to handle prefix variations)
+                            if 'get_graph_stats' in tool.name and stats_tool is None:
                                 stats_tool = tool
                                 logger.info(f"Found stats tool: {tool.name}")
-                            elif tool.name == 'neo4j_hypergraph_calculate_hausdorff_dimension':
+                            if 'calculate_hausdorff_dimension' in tool.name and hausdorff_tool is None:
                                 hausdorff_tool = tool
                                 logger.info(f"Found hausdorff tool: {tool.name}")
                     
-                    logger.info(f"Available tools: {all_tool_names}")
+                    if not hausdorff_tool:
+                        logger.warning(f"Hausdorff tool not found among {len(all_tool_names)} tools: {all_tool_names}")
                     
                     if stats_tool:
                         # Execute the tool directly
@@ -379,7 +384,8 @@ class ConsciousnessDashboard:
                         if stats.get('success', False):
                             neo4j_stats = {
                                 'node_count': stats.get('concept_count', 0),  # Note: field is 'concept_count'
-                                'edge_count': stats.get('semantic_relationships', 0),  # Note: field is 'semantic_relationships'
+                                'edge_count': stats.get('total_relationships', stats.get('semantic_relationships', 0)),  # Prefer total, fallback to semantic
+                                'semantic_edge_count': stats.get('semantic_relationships', 0),  # Keep semantic count too
                                 'hyperedge_count': stats.get('hyperedge_count', 0),
                                 'avg_weight': stats.get('avg_semantic_weight', 0.0)
                             }
@@ -1447,6 +1453,26 @@ class ConsciousnessDashboard:
     <p>Please ensure elder-dashboard.html is in the frontend directory.</p>
 </body>
 </html>"""
+    
+    def get_mobile_html(self):
+        """Return the mobile chat HTML as a string"""
+        try:
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), '..', 'frontend', 'mobile.html'),
+                os.path.join(os.path.dirname(__file__), 'mobile.html'),
+                'frontend/mobile.html'
+            ]
+            
+            for html_path in possible_paths:
+                if os.path.exists(html_path):
+                    with open(html_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+            
+            raise FileNotFoundError("mobile.html not found")
+            
+        except Exception as e:
+            logger.error(f"Error reading mobile HTML file: {e}")
+            return f"Error loading mobile chat: {e}"
     
     async def _query_neo4j_directly(self, query: str, parameters: dict = None) -> dict:
         """Query Neo4j directly without MCP filtering"""

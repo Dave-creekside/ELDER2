@@ -127,11 +127,19 @@ class DeepSleepEngine:
             # Identify target modules (e.g., q_proj, v_proj)
             target_modules = config.LORA_TARGET_MODULES
             
+            total_modules_updated = 0
+            total_modules_skipped = 0
+            concepts_processed = 0
+            
             for concept, concept_traces in traces_by_concept.items():
                 if len(concept_traces) < 2:
+                    logger.info(f"Skipping concept '{concept}': only {len(concept_traces)} trace(s) (need ≥2)")
                     continue 
                 
-                logger.info(f"Consolidating geometry for concept: {concept}")
+                concepts_processed += 1
+                concept_updates = 0
+                concept_skips = 0
+                logger.info(f"📐 Consolidating geometry for concept: {concept} ({len(concept_traces)} traces)")
                 
                 # Extract vectors (deltas)
                 deltas = np.array([t.vector for t in concept_traces])
@@ -182,43 +190,79 @@ class DeepSleepEngine:
                                     # module.lora_B is [out_features, rank]
                                     # module.lora_A is [rank, in_features]
                                     
-                                    # Detect target dtype from the LoRA weights (usually float32 even if model is 4bit)
+                                    # Detect target dtype and device from the LoRA weights
+                                    # (usually float32 even if model is 4bit)
+                                    # Use the module's actual device to handle multi-GPU setups
                                     target_dtype = module.lora_A['default'].weight.dtype
+                                    module_device = module.lora_A['default'].weight.device
                                     
-                                    # Convert to torch tensors with correct dtype
-                                    natural_delta_t = torch.tensor(natural_delta, device=self.student.device, dtype=target_dtype)
-                                    input_mean_t = torch.tensor(input_mean, device=self.student.device, dtype=target_dtype)
+                                    # Get each module's actual dimensions
+                                    # GQA models have asymmetric projections (e.g., q_proj: in=2560, out=2048)
+                                    lora_a_in_dim = module.lora_A['default'].weight.shape[1]   # [rank, in_features]
+                                    lora_b_out_dim = module.lora_B['default'].weight.shape[0]   # [out_features, rank]
                                     
-                                    # We want the output of (B*A*x) to move by natural_delta
-                                    # Update B: dB ~ natural_delta * (A*x)^T
-                                    # We assume input_mean approximates x at this layer (simplification)
+                                    # Adapt trace vectors to match this module's dimensions
+                                    # Truncate if trace is longer, zero-pad if shorter
+                                    def adapt_vector(vec, target_dim):
+                                        """Adapt a numpy vector to target dimension by truncating or zero-padding"""
+                                        if len(vec) == target_dim:
+                                            return vec
+                                        elif len(vec) > target_dim:
+                                            return vec[:target_dim]  # Truncate to leading components
+                                        else:
+                                            return np.pad(vec, (0, target_dim - len(vec)))  # Zero-pad
                                     
-                                    # Project input through A
-                                    # lora_A: [r, in], input: [in] -> mid: [r]
-                                    if module.lora_A['default'].weight.shape[1] == input_mean_t.shape[0]:
-                                        mid_act = module.lora_A['default'].weight @ input_mean_t
-                                        
-                                        # Calculate update for B
-                                        # natural_delta: [out], mid_act: [r] -> update: [out, r]
-                                        # Outer product
-                                        update = torch.outer(natural_delta_t, mid_act)
-                                        
-                                        # Scale by learning rate and LoRA scaling
-                                        scaling = module.scaling['default']
-                                        update = update * self.learning_rate / scaling
-                                        
-                                        # Apply update
-                                        module.lora_B['default'].weight += update
-                                        total_updates_magnitude += update.norm().item()
+                                    # Adapt input_mean to match lora_A's in_features
+                                    adapted_input = adapt_vector(input_mean, lora_a_in_dim)
+                                    # Adapt natural_delta to match lora_B's out_features
+                                    adapted_delta = adapt_vector(natural_delta, lora_b_out_dim)
+                                    
+                                    # Convert to torch tensors on the same device as this module's weights
+                                    natural_delta_t = torch.tensor(adapted_delta, device=module_device, dtype=target_dtype)
+                                    input_mean_t = torch.tensor(adapted_input, device=module_device, dtype=target_dtype)
+                                    
+                                    # Hebbian update: dB ~ natural_delta * (A*x)^T
+                                    # Project input through A: [rank, in] @ [in] -> [rank]
+                                    mid_act = module.lora_A['default'].weight @ input_mean_t
+                                    
+                                    # Outer product: [out] x [rank] -> [out, rank]
+                                    update = torch.outer(natural_delta_t, mid_act)
+                                    
+                                    # Scale by learning rate and LoRA scaling
+                                    scaling = module.scaling['default']
+                                    update = update * self.learning_rate / scaling
+                                    
+                                    # Apply update
+                                    module.lora_B['default'].weight += update
+                                    total_updates_magnitude += update.norm().item()
+                                    concept_updates += 1
+                                    total_modules_updated += 1
+
+                    logger.info(f"   ✅ Concept '{concept}': {concept_updates} LoRA module updates applied across all layers")
 
                 except Exception as e:
                     logger.error(f"Error processing concept {concept}: {e}")
                     continue
 
+            # === TRAINING SUMMARY ===
+            logger.info("=" * 60)
+            logger.info("📊 DEEP SLEEP TRAINING SUMMARY")
+            logger.info(f"   Traces processed:      {len(points)}")
+            logger.info(f"   Concepts consolidated:  {concepts_processed} / {len(traces_by_concept)}")
+            logger.info(f"   LoRA modules updated:   {total_modules_updated}")
+            logger.info(f"   Total update magnitude: {total_updates_magnitude:.6f}")
+            logger.info(f"   SVD rank (k):           {self.k_components}")
+            logger.info(f"   Learning rate:          {self.learning_rate}")
+            logger.info(f"   Hidden dim:             {self.embedding_dim}")
+            logger.info("=" * 60)
+            
             # Save updated adapter
             if total_updates_magnitude > 0:
                 logger.info(f"💾 Saving updated adapter (Total Magnitude: {total_updates_magnitude:.4f})")
                 self.student.save_adapter()
+                logger.info(f"   Adapter saved to: {self.student.adapter_path}")
+            else:
+                logger.warning("⚠️ No weight updates were applied — adapter NOT saved")
             
             # Cleanup traces
             points_ids = [p.id for p in points]

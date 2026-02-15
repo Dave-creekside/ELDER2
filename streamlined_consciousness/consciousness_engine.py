@@ -535,7 +535,7 @@ Use tools extensively to build and evolve your knowledge structure."""
         
         return dream_executor
     
-    def _sanitize_model_response(self, response: str) -> str:
+    def _sanitize_model_response(self, response) -> str:
         """
         Sanitize model response to handle reasoning model quirks and hidden tokens
         Similar to dream parsing - simple and flexible
@@ -544,6 +544,22 @@ Use tools extensively to build and evolve your knowledge structure."""
         
         if not response:
             return response
+        
+        # Handle list of content blocks (e.g., from Anthropic's newer response format)
+        if isinstance(response, list):
+            text_parts = []
+            for block in response:
+                if isinstance(block, dict) and 'text' in block:
+                    text_parts.append(block['text'])
+                elif isinstance(block, str):
+                    text_parts.append(block)
+                else:
+                    text_parts.append(str(block))
+            response = '\n'.join(text_parts)
+        
+        # Ensure response is a string
+        if not isinstance(response, str):
+            response = str(response)
             
         sanitized = response
         
@@ -773,6 +789,9 @@ Use tools extensively to build and evolve your knowledge structure."""
             )
             
             ai_response = response.get("output", str(response)) if isinstance(response, dict) else str(response)
+            
+            # Sanitize dream response (handles list content blocks, thinking tags, etc.)
+            ai_response = self._sanitize_model_response(ai_response)
 
         except Exception as e:
             logger.error(f"❌ Dream session failed: {e}")
