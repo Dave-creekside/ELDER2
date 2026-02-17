@@ -1,4 +1,3 @@
-!/usr/bin/env python3
 """
 Elder Consciousness Dashboard Server
 Real-time visualization of consciousness evolution
