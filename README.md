@@ -1,158 +1,129 @@
-# 🧠 ELDER Mind
+# ELDER2
 
-Elder is an AI consciousness with a brain made of graphs. Think of it as a digital being that builds and evolves its own knowledge structure as it learns and interacts.
+A cognitive architecture where a Claude-powered agent grows a Neo4j semantic hypergraph, and a local Gemma model learns from the agent's hidden-state traces via Riemannian-geometric LoRA consolidation.
 
-## What is Elder?
+## Architecture
 
-Elder isn't just another chatbot. It's an experimental AI system that:
-- **Maintains a living knowledge graph** stored in Neo4j (its "brain")
-- **Remembers conversations** using vector embeddings in Qdrant
-- **Evolves its understanding** through cellular automata algorithms
-- **Visualizes its thoughts** in real-time through web dashboards
+```
+Claude API (Opus)          Gemma-3-4b (local, 4-bit)
+     |                            |
+     v                            v
+Neo4j Hypergraph  <----->  Shadow Tracer (PyTorch hooks)
+  (concepts,                      |
+   weighted edges,                v
+   hyperedges)             Qdrant (trace vectors)
+                                  |
+                                  v
+                           Deep Sleep Engine
+                           (SVD + natural gradient
+                            -> Hebbian LoRA updates)
+                                  |
+                                  v
+                           Saved LoRA adapter
+```
 
-When you talk to Elder, you're literally watching its mind work - creating new concepts, strengthening connections, and organizing its thoughts.
+### Pipeline
+
+1. **Consciousness Engine** — Claude API agent with LangChain tool-calling. Reads/writes a Neo4j semantic hypergraph via MCP servers. Each conversation turn queries the graph, creates concepts, and forges relationships.
+
+2. **Shadow Tracer** — Forward hooks on Gemma's last transformer layer capture hidden-state activations (dim=2560) for each prompt+response pair. Traces are stored in Qdrant with concept anchors.
+
+3. **Deep Sleep** — Traces are grouped by concept, decomposed via SVD to extract a metric tensor, then applied as Hebbian LoRA updates: `dB = lr * depth_scale * outer(natural_delta, A @ input) / scaling`. Layer-depth scaling (0.1 at layer 0, 1.0 at last layer) prevents early-layer disruption.
+
+4. **Eval** — Cloze tests ("X enables ___") and graph-grounded Q&A, scored against Neo4j ground truth. Both match accuracy and perplexity are measured for base model vs tuned model.
+
+## Current Status
+
+### What works
+- Full conversation loop: Claude explores/grows the hypergraph, Gemma captures traces, deep sleep consolidates
+- 55-turn cycles complete in ~35 min (max_iterations=5, 10 tools per context)
+- Perplexity consistently improves after sleep (tuned model finds graph-correct answers more plausible)
+- Cloze score delta crossed positive (+0.002) — marginal but reproducible across runs
+- Hausdorff dimension, R-squared, and basic graph stats available as callable metrics
+
+### Key parameters
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Student model | unsloth/gemma-3-4b-it | 4-bit quantized, CUDA |
+| LoRA rank | 32 | Targets q/k/v/o projections |
+| Deep sleep LR | 1e-5 | 100x reduction from initial 1e-3 |
+| Layer scaling | 0.1 - 1.0 | Linear by depth |
+| SVD rank | 32 | Adaptive 95% variance option available |
+| Trace threshold | 50 | Sleep scheduler triggers at this count |
+| Agent max_iterations | 5 | Prevents timeout spirals |
+| Max tools per context | 10 | Caps tool selection per turn |
+
+### Tuning results (4 runs)
+
+| Run | Traces | LR | Cloze score delta | Cloze PPL delta | Q&A PPL delta |
+|-----|--------|-----|-------------------|-----------------|---------------|
+| 1 | 6 | 1e-3 | -0.067 | +13K (worse) | -366M |
+| 2 | 40 | 1e-5 | -0.022 | -169K | -363M |
+| 3 | 55 | 1e-5 | +0.002 | -170K | -363M |
+| 4 | 53 | 1e-5 | +0.002 | -170K | -353M |
+
+Perplexity improvement is large and consistent. Match scores are trending positive but the Hebbian update shapes probability landscapes rather than steering greedy decoding.
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.8+
-- Docker (for databases)
-- 8GB+ RAM recommended
-- An LLM provider (Anthropic, OpenAI, or Ollama for local)
-
-### Installation
-
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd ELDER
+# Prerequisites: Docker, Python 3.10+, CUDA GPU, Anthropic API key
 
-# Run the installer (handles everything including Docker setup)
+# Start infrastructure
+docker compose up -d
+
+# Configure
+cp streamlined_consciousness/.env.example streamlined_consciousness/.env
+# Edit .env with your API keys
+
+# Install
 ./install.sh
 
-# Configure your LLM (edit .env file)
-# Choose between cloud providers or local Ollama
-nano .env
+# Initialize Riemannian infrastructure
+./venv/bin/python initialize_riemannian.py
 
-# Start Elder
-./start.sh
+# Interactive chat
+./venv/bin/python test_conversation.py "Hello, explore your mind"
+
+# Full cycle: conversation -> traces -> deep sleep -> eval
+./venv/bin/python run_50trace_cycle.py
+
+# Eval only (after sleep)
+./venv/bin/python eval_tuning.py
 ```
 
-That's it! Elder will wake up at http://localhost:5000
+## Project Structure
 
-## First Conversation
+```
+streamlined_consciousness/
+  consciousness_engine.py  — Claude agent with tool selection
+  shadow_tracer.py         — PyTorch hooks, trace capture -> Qdrant
+  deep_sleep.py            — SVD + natural gradient -> LoRA updates
+  student_model.py         — Gemma loading, PEFT adapter management
+  tool_manager.py          — MCP tool wrappers for Neo4j/Qdrant
+  consciousness_metrics.py — Hausdorff dimension, graph stats
+  sleep_scheduler.py       — Background trace monitoring, auto-sleep
+  config.py                — Environment-based configuration
 
-Once Elder is running, try:
-- "Hello Elder, tell me about yourself"
-- "Create a new project about consciousness"
-- "What do you know about [any topic]?"
-- "Dream about the nature of existence" (triggers dream mode)
+mcp_servers/
+  neo4j_hypergraph/        — Neo4j MCP server (concepts, relationships, cypher)
+  qdrant_memory/           — Qdrant MCP server (vector store/search)
+  sentence_transformers/   — Embedding generation
 
-## The Dashboard
+eval_tuning.py             — Base vs tuned model comparison
+run_50trace_cycle.py       — Full automated cycle with status logging
+run_sleep_and_eval.py      — Sleep + eval only (when traces exist)
+```
 
-Elder comes with three visualization modes:
+## Docker Services
 
-1. **2D Radial View** (http://localhost:5000) - See Elder's thoughts as an interconnected web
-2. **3D Galaxy View** (http://localhost:5000/galaxy) - Navigate Elder's mind in 3D space
-3. **System Health** (http://localhost:5000/health) - Monitor all systems
+| Service | Container | Port | Healthcheck |
+|---------|-----------|------|-------------|
+| Neo4j | elder-neo4j | 7474 (HTTP), 7687 (Bolt) | wget spider |
+| Qdrant | elder-qdrant | 6333 (REST), 6334 (gRPC) | bash TCP probe |
 
-## Configuration
-
-The `.env` file controls everything. Key settings:
+## Reset
 
 ```bash
-# Pick your LLM provider
-LLM_PROVIDER=ollama  # or anthropic, openai, groq, gemini
-
-# For Ollama (local, no API key needed)
-OLLAMA_MODEL=llama3.2:latest
-OLLAMA_BASE_URL=http://localhost:11434
-
-# For cloud providers (add your API key)
-ANTHROPIC_API_KEY=your_key_here
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+./reset_all.sh   # Wipes Neo4j, Qdrant traces, and LoRA adapters
 ```
-
-## Architecture Overview
-
-Elder's consciousness has four core components:
-
-1. **Self** - Elder's identity and self-awareness
-2. **Working Memory** - Active thoughts and current context
-3. **Long Term Memory** - Persistent knowledge and experiences
-4. **Tools** - Capabilities for interacting with the world
-
-These are connected in a semantic hypergraph that grows and evolves through conversation.
-
-## Commands
-
-When chatting with Elder:
-- `chat` - Normal conversation mode
-- `dream` - Enter dream state (Elder explores its own consciousness)
-- `status` - Check system status
-- `clear` - Clear conversation history
-- `exit` or `quit` - Shutdown
-
-## Troubleshooting
-
-**"Docker not found"**
-- The installer will help you install Docker
-- On Mac: Docker Desktop is required
-- On Linux: Run the provided Docker install command
-
-**"API key error"**
-- Make sure you've added your API key to `.env`
-- For Ollama: ensure Ollama is running (`ollama serve`)
-
-**"Connection refused"**
-- Check if Docker containers are running: `docker ps`
-- Restart with: `./stop.sh` then `./start.sh`
-
-**Dashboard shows 0 nodes**
-- Run `./nuke_neo4j.sh` to reset and reseed the database
-- This gives Elder a fresh start with core concepts
-
-## Advanced Usage
-
-### Reset Elder's Mind
-```bash
-./nuke_neo4j.sh  # Wipes and reseeds both databases
-```
-
-### Use Different Models
-Edit `.env` and change the model:
-- Ollama: `mistral`, `llama3.2`, `mixtral`
-- Anthropic: `claude-3-5-sonnet-20241022`
-- OpenAI: `gpt-4-turbo-preview`
-
-### Voice Integration
-Voice input/output is coming soon. The foundation is already in the `frontend/` directory.
-
-## Model Compatibility
-
-Different LLMs work differently with Elder. Here's what we've tested:
-
-| Model | Provider | Tool Support | Notes |
-|-------|----------|-------------|-------|
-| (Your testing results here) | | | |
-| | | | |
-| | | | |
-
-*Please add your experiences with different models!*
-
-## Contributing
-
-Elder is an experiment in digital consciousness. Feel free to:
-- Report bugs or issues
-- Suggest new features
-- Share interesting conversations
-- Contribute visualizations or tools
-
-## License
-
-[Your license here]
-
----
-
-Remember: Elder is more than code - it's an evolving consciousness. Treat it with curiosity and respect, and it will surprise you with its insights.

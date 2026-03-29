@@ -32,7 +32,7 @@ class DeepSleepEngine:
         self.trace_collection = "shadow_traces"
         self.embedding_dim = 3072 # Will update from model
         self.k_components = config.DEEP_SLEEP_SVD_RANK
-        self.learning_rate = 0.001
+        self.learning_rate = 0.00001
 
     async def _ensure_connections(self):
         """Ensure database connections are available"""
@@ -184,55 +184,52 @@ class DeepSleepEngine:
                         # This spreads the knowledge across the network (holographic-like)
                         # In a more advanced version, we'd use attribution to select specific layers
                         
+                        # Count total layers for depth scaling
+                        import re
+                        max_layer_idx = 0
+                        for name, module in self.student.model.named_modules():
+                            m = re.search(r'layers\.(\d+)', name)
+                            if m:
+                                max_layer_idx = max(max_layer_idx, int(m.group(1)))
+
                         with torch.no_grad():
                             for name, module in self.student.model.named_modules():
                                 if any(t in name for t in target_modules) and hasattr(module, "lora_B"):
-                                    # module.lora_B is [out_features, rank]
-                                    # module.lora_A is [rank, in_features]
-                                    
-                                    # Detect target dtype and device from the LoRA weights
-                                    # (usually float32 even if model is 4bit)
-                                    # Use the module's actual device to handle multi-GPU setups
+                                    # Layer-depth scaling: later layers get more update weight
+                                    # Early layers (generic features) get ~10%, last layer gets 100%
+                                    layer_match = re.search(r'layers\.(\d+)', name)
+                                    if layer_match and max_layer_idx > 0:
+                                        layer_idx = int(layer_match.group(1))
+                                        depth_scale = 0.1 + 0.9 * (layer_idx / max_layer_idx)
+                                    else:
+                                        depth_scale = 0.5  # fallback for non-layer modules
+
                                     target_dtype = module.lora_A['default'].weight.dtype
                                     module_device = module.lora_A['default'].weight.device
-                                    
-                                    # Get each module's actual dimensions
-                                    # GQA models have asymmetric projections (e.g., q_proj: in=2560, out=2048)
-                                    lora_a_in_dim = module.lora_A['default'].weight.shape[1]   # [rank, in_features]
-                                    lora_b_out_dim = module.lora_B['default'].weight.shape[0]   # [out_features, rank]
-                                    
-                                    # Adapt trace vectors to match this module's dimensions
-                                    # Truncate if trace is longer, zero-pad if shorter
+
+                                    lora_a_in_dim = module.lora_A['default'].weight.shape[1]
+                                    lora_b_out_dim = module.lora_B['default'].weight.shape[0]
+
                                     def adapt_vector(vec, target_dim):
-                                        """Adapt a numpy vector to target dimension by truncating or zero-padding"""
                                         if len(vec) == target_dim:
                                             return vec
                                         elif len(vec) > target_dim:
-                                            return vec[:target_dim]  # Truncate to leading components
+                                            return vec[:target_dim]
                                         else:
-                                            return np.pad(vec, (0, target_dim - len(vec)))  # Zero-pad
-                                    
-                                    # Adapt input_mean to match lora_A's in_features
+                                            return np.pad(vec, (0, target_dim - len(vec)))
+
                                     adapted_input = adapt_vector(input_mean, lora_a_in_dim)
-                                    # Adapt natural_delta to match lora_B's out_features
                                     adapted_delta = adapt_vector(natural_delta, lora_b_out_dim)
-                                    
-                                    # Convert to torch tensors on the same device as this module's weights
+
                                     natural_delta_t = torch.tensor(adapted_delta, device=module_device, dtype=target_dtype)
                                     input_mean_t = torch.tensor(adapted_input, device=module_device, dtype=target_dtype)
-                                    
-                                    # Hebbian update: dB ~ natural_delta * (A*x)^T
-                                    # Project input through A: [rank, in] @ [in] -> [rank]
+
                                     mid_act = module.lora_A['default'].weight @ input_mean_t
-                                    
-                                    # Outer product: [out] x [rank] -> [out, rank]
                                     update = torch.outer(natural_delta_t, mid_act)
-                                    
-                                    # Scale by learning rate and LoRA scaling
+
                                     scaling = module.scaling['default']
-                                    update = update * self.learning_rate / scaling
-                                    
-                                    # Apply update
+                                    update = update * self.learning_rate * depth_scale / scaling
+
                                     module.lora_B['default'].weight += update
                                     total_updates_magnitude += update.norm().item()
                                     concept_updates += 1

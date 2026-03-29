@@ -1,0 +1,619 @@
+{
+  "model": "unsloth/gemma-3-4b-it",
+  "adapter": "adapters/default/unsloth_gemma-3-4b-it",
+  "timestamp": "2026-03-24 20:48:34",
+  "cloze": [
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nintegrated information theory extends ___\nAnswer with just the concept name:",
+      "expected": "information theory",
+      "base_response": "consciousness",
+      "tuned_response": "The result is a network of connections, a web of information, a system of relationships.\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 421.62267331611395,
+      "tuned_ppl": 815.2505607311772
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nrecursive emergence inherits ontology from ___\nAnswer with just the concept name:",
+      "expected": "emergence",
+      "base_response": "processes",
+      "tuned_response": "____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 10753.500849194672,
+      "tuned_ppl": 10434.455649805332
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\ncognitive entropy inherits formalism from ___\nAnswer with just the concept name:",
+      "expected": "entropy",
+      "base_response": "mathematics",
+      "tuned_response": "The answer is:\nThe answer is:\nThe answer is:\nThe answer is:\nThe answer is:\nThe answer is:",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 507113.85418927437,
+      "tuned_ppl": 98908.48067921038
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nattractor landscape contains ___\nAnswer with just the concept name:",
+      "expected": "strange attractor",
+      "base_response": "states",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 848385.6793626647,
+      "tuned_ppl": 126873.77229902791
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nrecursive emergence inherits mechanism from ___\nAnswer with just the concept name:",
+      "expected": "recursion",
+      "base_response": "Self",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 183469.2715526756,
+      "tuned_ppl": 12000.825437834033
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\ndissipative structures gives rise to ___\nAnswer with just the concept name:",
+      "expected": "dissipative adaptation",
+      "base_response": "Emergence",
+      "tuned_response": "dissipative structures",
+      "base_score": 0.0,
+      "tuned_score": 0.35,
+      "base_ppl": 188510.99651037753,
+      "tuned_ppl": 1610306.299562167
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nmemory consolidation transfers to ___\nAnswer with just the concept name:",
+      "expected": "Long Term Memory",
+      "base_response": "attention",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 605.8514400521129,
+      "tuned_ppl": 135.0376755631673
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\ninformation geometry geometrizes ___\nAnswer with just the concept name:",
+      "expected": "information theory",
+      "base_response": "perception",
+      "tuned_response": "information geometry",
+      "base_score": 0.0,
+      "tuned_score": 0.35,
+      "base_ppl": 1222.540619208609,
+      "tuned_ppl": 1034.2497073361096
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nmutual information is a component of ___\nAnswer with just the concept name:",
+      "expected": "integrated information theory",
+      "base_response": "information integration",
+      "tuned_response": "Mutual information is a measure of the amount of information that is shared by two variables.\nMutual information is a measure of the amount of information that",
+      "base_score": 0.2333333333333333,
+      "tuned_score": 0.2333333333333333,
+      "base_ppl": 312.1219253998384,
+      "tuned_ppl": 890.723160188926
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\ntopological data analysis applies to ___\nAnswer with just the concept name:",
+      "expected": "graph topology",
+      "base_response": "networks",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 48980.575353918044,
+      "tuned_ppl": 16753.927336155364
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nsemantic crystallization occurs within ___\nAnswer with just the concept name:",
+      "expected": "semantic network",
+      "base_response": "systems",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 1993817.7549528717,
+      "tuned_ppl": 88388.55367769061
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nsemantic network instantiated by ___\nAnswer with just the concept name:",
+      "expected": "Self",
+      "base_response": "Emergence",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 10236.314662356337,
+      "tuned_ppl": 14888.154710323577
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nsemantic crystallization driven by ___\nAnswer with just the concept name:",
+      "expected": "semantic gravity",
+      "base_response": "emergence",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 1892146.1554294059,
+      "tuned_ppl": 49125.12682197947
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nsemantic gravity describes the dynamics of ___\nAnswer with just the concept name:",
+      "expected": "semantic network",
+      "base_response": "information",
+      "tuned_response": "___\n___\n___\n___\n___\n___\n___\n___\n___\n___\n___\n___\n___\n___\n___",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 1823748.8059948427,
+      "tuned_ppl": 98448.39194824561
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\ninformation geometry instantiates ___\nAnswer with just the concept name:",
+      "expected": "riemannian geometry",
+      "base_response": "emergence",
+      "tuned_response": "information geometry",
+      "base_score": 0.0,
+      "tuned_score": 0.35,
+      "base_ppl": 78.48053765176513,
+      "tuned_ppl": 337.61882886620367
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nstrange loop resonates with ___\nAnswer with just the concept name:",
+      "expected": "strange attractor",
+      "base_response": "emergence",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 32573.50233547139,
+      "tuned_ppl": 472338.71418747434
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\ncognitive entropy measured through ___\nAnswer with just the concept name:",
+      "expected": "meta cognition",
+      "base_response": "information",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 91712.72323514371,
+      "tuned_ppl": 16410.224527239992
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nattractor landscape unifies with ___\nAnswer with just the concept name:",
+      "expected": "energy minimization landscape",
+      "base_response": "dynamics",
+      "tuned_response": "____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 209565.6550269733,
+      "tuned_ppl": 20477.930875967802
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nemergence enables ___\nAnswer with just the concept name:",
+      "expected": "self organization",
+      "base_response": "phenomenal experience",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 14102.154561649637,
+      "tuned_ppl": 14555.106512315671
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\ngeodesic optimization converges toward ___\nAnswer with just the concept name:",
+      "expected": "energy minimization landscape",
+      "base_response": "emergence",
+      "tuned_response": "___",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 11564.173589912789,
+      "tuned_ppl": 21235.80085821915
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\ninformation theory quantifies ___\nAnswer with just the concept name:",
+      "expected": "entropy",
+      "base_response": "entropy",
+      "tuned_response": "Information",
+      "base_score": 1.0,
+      "tuned_score": 0.0,
+      "base_ppl": 109.22817106272697,
+      "tuned_ppl": 34514.53367778109
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nentropy is foundational to ___\nAnswer with just the concept name:",
+      "expected": "information theory",
+      "base_response": "emergence",
+      "tuned_response": "____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 10261.071978523021,
+      "tuned_ppl": 2201.187070618432
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nrecursive emergence drives ___\nAnswer with just the concept name:",
+      "expected": "self organization",
+      "base_response": "Self-organization",
+      "tuned_response": "____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____\n____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 4098.17254457968,
+      "tuned_ppl": 7374.030810745246
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nconsciousness is a core property of ___\nAnswer with just the concept name:",
+      "expected": "Self",
+      "base_response": "systems",
+      "tuned_response": "____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 91076.01861915343,
+      "tuned_ppl": 38071.9694945185
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nergodicity connects to ___\nAnswer with just the concept name:",
+      "expected": "entropy",
+      "base_response": "Emergence",
+      "tuned_response": "____",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 41294.584039871006,
+      "tuned_ppl": 96721.2596234498
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nfree energy principle mathematizes ___\nAnswer with just the concept name:",
+      "expected": "autopoiesis",
+      "base_response": "perception",
+      "tuned_response": "Consciousness",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 1487.8019991459043,
+      "tuned_ppl": 995.4618748242806
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nentropic brain parametrizes ___\nAnswer with just the concept name:",
+      "expected": "consciousness",
+      "base_response": "Emergence",
+      "tuned_response": "___",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 1919.91497925542,
+      "tuned_ppl": 48.65616390619906
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nmorphogenesis exemplifies ___\nAnswer with just the concept name:",
+      "expected": "emergence",
+      "base_response": "pattern formation",
+      "tuned_response": "morphogenesis",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 3147.9186428783073,
+      "tuned_ppl": 51286.28282746616
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nqualia constitutes ___\nAnswer with just the concept name:",
+      "expected": "consciousness",
+      "base_response": "experience",
+      "tuned_response": "qualia",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 5613.961044646986,
+      "tuned_ppl": 57.30391413027822
+    },
+    {
+      "prompt": "In a knowledge graph about consciousness and complexity science, complete this relationship:\nfree energy principle instantiates ___\nAnswer with just the concept name:",
+      "expected": "energy minimization landscape",
+      "base_response": "prediction",
+      "tuned_response": "___",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 6086.567244602733,
+      "tuned_ppl": 14893.110794367647
+    }
+  ],
+  "qa": [
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What does integrated information theory extend?\nA:",
+      "expected": "information theory",
+      "base_response": "Information integration.",
+      "tuned_response": "(A brief, declarative statement)",
+      "base_score": 0.35,
+      "tuned_score": 0.0,
+      "base_ppl": 6906.370120206743,
+      "tuned_ppl": 12212.05842636338
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does recursive emergence inherits ontology from?\nA:",
+      "expected": "emergence",
+      "base_response": "Lower-level systems.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 5462755.954782648,
+      "tuned_ppl": 321748.7318646611
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does cognitive entropy inherits formalism from?\nA:",
+      "expected": "entropy",
+      "base_response": "Mathematical models.",
+      "tuned_response": "(1)\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 84042391.81073974,
+      "tuned_ppl": 1011165.6981579782
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does attractor landscape contains?\nA:",
+      "expected": "strange attractor",
+      "base_response": "Stable states, patterns.",
+      "tuned_response": "(1)\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 2205999.7389817894,
+      "tuned_ppl": 1258904.586905225
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does recursive emergence inherits mechanism from?\nA:",
+      "expected": "recursion",
+      "base_response": "Lower-level systems.",
+      "tuned_response": "(1)\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 29354594.69897367,
+      "tuned_ppl": 1183675.1308784627
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does dissipative structures gives rise to?\nA:",
+      "expected": "dissipative adaptation",
+      "base_response": "Integrated awareness.",
+      "tuned_response": "(1)\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 1871347.2602544078,
+      "tuned_ppl": 813466.7137532596
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: Where does memory consolidation transfer to?\nA:",
+      "expected": "Long Term Memory",
+      "base_response": "Hippocampus, cortex.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 57.1709430215538,
+      "tuned_ppl": 65.35561940581152
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does information geometry geometrizes?\nA:",
+      "expected": "information theory",
+      "base_response": "Subjective experience.",
+      "tuned_response": "(1) Information, of course.\nQ:\nA:\nA:\nA:\nA:\nA:\nA:",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 31539.121087484094,
+      "tuned_ppl": 11894.665833077794
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What is mutual information a component of?\nA:",
+      "expected": "integrated information theory",
+      "base_response": "Information integration.",
+      "tuned_response": "(A brief, simple answer)",
+      "base_score": 0.2333333333333333,
+      "tuned_score": 0.0,
+      "base_ppl": 68.72572064355504,
+      "tuned_ppl": 1294.367200470589
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does topological data analysis applies to?\nA:",
+      "expected": "graph topology",
+      "base_response": "Brain network structure.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 25741.676803894843,
+      "tuned_ppl": 95770.53511837695
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does semantic crystallization occurs within?\nA:",
+      "expected": "semantic network",
+      "base_response": "Integrated information systems.",
+      "tuned_response": "(A brief, concise answer)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 17909.234395590265,
+      "tuned_ppl": 13209.497137099665
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does semantic network instantiated by?\nA:",
+      "expected": "Self",
+      "base_response": "Neural connections.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 3668.1623674348666,
+      "tuned_ppl": 3722.198399400547
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does semantic crystallization driven by?\nA:",
+      "expected": "semantic gravity",
+      "base_response": "Integrated information theory.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 813936.9737092156,
+      "tuned_ppl": 69892.10037696651
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does semantic gravity describes the dynamics of?\nA:",
+      "expected": "semantic network",
+      "base_response": "Information flow.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 3191.6660744945048,
+      "tuned_ppl": 94892.12022911779
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does information geometry instantiates?\nA:",
+      "expected": "riemannian geometry",
+      "base_response": "Geometric relationships.",
+      "tuned_response": "(1) Information, (2) relationships, (3) representations.\n\n\n***\n***\n***\n***\n***",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 182.01084560731536,
+      "tuned_ppl": 539.5895066841534
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What does strange loop resonate with?\nA:",
+      "expected": "strange attractor",
+      "base_response": "Recursion, self-reference.",
+      "tuned_response": "(Briefly, acknowledging the question and acknowledging the potential for a complex, non-obvious answer)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 110072.79616024073,
+      "tuned_ppl": 743818.424423336
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does cognitive entropy measured through?\nA:",
+      "expected": "meta cognition",
+      "base_response": "Information processing.",
+      "tuned_response": "(A brief, concise answer)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 1239700.3424017152,
+      "tuned_ppl": 470259.9370201052
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does attractor landscape unifies with?\nA:",
+      "expected": "energy minimization landscape",
+      "base_response": "Dynamic patterns.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 98201.12112920922,
+      "tuned_ppl": 16059.307777150678
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What does emergence enable?\nA:",
+      "expected": "self organization",
+      "base_response": "Novel properties arise.",
+      "tuned_response": "(A brief, simple answer)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 26124.990383067227,
+      "tuned_ppl": 3079.590046865909
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does geodesic optimization converges toward?\nA:",
+      "expected": "energy minimization landscape",
+      "base_response": "Integrated information.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 265620.86426620506,
+      "tuned_ppl": 74711.17827313187
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What does information theory quantify?\nA:",
+      "expected": "entropy",
+      "base_response": "Information content.",
+      "tuned_response": "Information.\nQ: What does that information represent?\nA: A representation of a state.\nQ: What does that state have to be",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 1556612.1334986337,
+      "tuned_ppl": 301056.1957669756
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What is entropy foundational to?\nA:",
+      "expected": "information theory",
+      "base_response": "Information processing.",
+      "tuned_response": "(A brief, declarative statement)",
+      "base_score": 0.35,
+      "tuned_score": 0.0,
+      "base_ppl": 4677.1187414194,
+      "tuned_ppl": 8998.392038599648
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does recursive emergence drives?\nA:",
+      "expected": "self organization",
+      "base_response": "Self-organization, complexity.",
+      "tuned_response": "(1)\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:\nA:\nQ:",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 2675.672026152981,
+      "tuned_ppl": 120169.45305411152
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What is consciousness a core property of?\nA:",
+      "expected": "Self",
+      "base_response": "Complex systems.",
+      "tuned_response": "(A brief, simple answer)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 1971.6716596560118,
+      "tuned_ppl": 34.817524253557885
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does ergodicity connects to?\nA:",
+      "expected": "entropy",
+      "base_response": "Temporal experience.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 4541434.418716175,
+      "tuned_ppl": 26433109.893557455
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What does free energy principle mathematize?\nA:",
+      "expected": "autopoiesis",
+      "base_response": "Minimizing surprise.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 102269.23269161637,
+      "tuned_ppl": 11663.578785563432
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does entropic brain parametrizes?\nA:",
+      "expected": "consciousness",
+      "base_response": "Information processing.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 32249186.37457258,
+      "tuned_ppl": 1738101.9676570916
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What does morphogenesis exemplify?\nA:",
+      "expected": "emergence",
+      "base_response": "Pattern formation.",
+      "tuned_response": "(A brief, declarative answer)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 803230.8209678654,
+      "tuned_ppl": 1183434.7122560386
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: What does qualia constitute?\nA:",
+      "expected": "consciousness",
+      "base_response": "Subjective experience.",
+      "tuned_response": "(1)\nQ: What does qualia constitute?\nA: (1)\nQ: What does qualia constitute?\nA:",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 10465481374.523756,
+      "tuned_ppl": 105017.472393422
+    },
+    {
+      "prompt": "Answer briefly (1-3 words) based on a knowledge graph about consciousness and complexity science.\nQ: In a consciousness knowledge graph, what does free energy principle instantiates?\nA:",
+      "expected": "energy minimization landscape",
+      "base_response": "Minimizing surprise.",
+      "tuned_response": "(1)",
+      "base_score": 0.0,
+      "tuned_score": 0.0,
+      "base_ppl": 36747.57326561899,
+      "tuned_ppl": 64115.008764743165
+    }
+  ],
+  "summary": {
+    "cloze_base_score": 0.04111111111111111,
+    "cloze_tuned_score": 0.042777777777777776,
+    "cloze_base_ppl": 267813.899135536,
+    "cloze_tuned_ppl": 97350.74804227166,
+    "qa_base_score": 0.031111111111111107,
+    "qa_tuned_score": 0.0,
+    "qa_base_ppl": 354345339.6743345,
+    "qa_tuned_ppl": 1205536.1092915132
+  }
+}

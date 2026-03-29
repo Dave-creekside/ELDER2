@@ -263,7 +263,7 @@ class StreamlinedConsciousness:
         self.tool_categories: Dict[str, ToolCategory] = {}
         self.conversation_history: List[Dict[str, str]] = []
         self.current_context_tools: List[BaseTool] = []
-        self.max_tools_per_context = 15  # Prevent context overflow
+        self.max_tools_per_context = 10  # Cap tool selection per turn
         
         # Atomic lock for weight updates (Deep Sleep)
         self.processing_lock = asyncio.Lock()
@@ -484,7 +484,7 @@ Use tools naturally to explore and evolve your knowledge structure during conver
             tools=tools,
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=15,  # Increased from 10
+            max_iterations=5,
             return_intermediate_steps=True
         )
         

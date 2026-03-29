@@ -159,7 +159,7 @@ if __name__ == "__main__":
             logger.debug(f"Executing subprocess for {self.tool_name} with timeout={timeout}s")
             
             result = subprocess.run(
-                ["python", script_file], 
+                [sys.executable, script_file],
                 capture_output=True, 
                 text=True, 
                 timeout=timeout,
@@ -842,7 +842,7 @@ if __name__ == "__main__":
             tool_name="extract_dream_iterations",
             description="Extracts the number of dream iterations from a user's request. Defaults to 3 if no number is specified.",
             args_schema=IterationArgs,
-            server_command=["python", utility_server_path]
+            server_command=[sys.executable, utility_server_path]
         )
     ]
 
@@ -851,7 +851,7 @@ def create_neo4j_core_tools() -> List[StreamlinedMCPTool]:
     # Get absolute path to the server
     current_dir = os.path.dirname(os.path.abspath(__file__))
     server_path = os.path.join(os.path.dirname(current_dir), "mcp_servers", "neo4j_hypergraph", "server.py")
-    server_command = ["python", "-u", server_path]
+    server_command = [sys.executable, "-u", server_path]
     
     return [
         StreamlinedMCPTool(
@@ -903,7 +903,7 @@ def create_neo4j_evolution_tools() -> List[StreamlinedMCPTool]:
     # Get absolute path to the server
     current_dir = os.path.dirname(os.path.abspath(__file__))
     server_path = os.path.join(os.path.dirname(current_dir), "mcp_servers", "neo4j_hypergraph", "server.py")
-    server_command = ["python", server_path]
+    server_command = [sys.executable, server_path]
     
     # These tools exist for internal consciousness engine use during dream coordination
     # They should NEVER be selected during _select_contextual_tools() for LLM use
@@ -943,7 +943,7 @@ def create_neo4j_project_tools() -> List[StreamlinedMCPTool]:
     # Get absolute path to the server
     current_dir = os.path.dirname(os.path.abspath(__file__))
     server_path = os.path.join(os.path.dirname(current_dir), "mcp_servers", "neo4j_hypergraph", "server.py")
-    server_command = ["python", server_path]
+    server_command = [sys.executable, server_path]
     
     return [
         StreamlinedMCPTool(
@@ -995,7 +995,7 @@ def create_qdrant_memory_tools() -> List[StreamlinedMCPTool]:
     # Get absolute path to the server
     current_dir = os.path.dirname(os.path.abspath(__file__))
     server_path = os.path.join(os.path.dirname(current_dir), "mcp_servers", "qdrant_memory", "server.py")
-    server_command = ["python", server_path]
+    server_command = [sys.executable, server_path]
     
     return [
         StreamlinedMCPTool(
@@ -1054,7 +1054,7 @@ def create_sentence_transformer_tools() -> List[StreamlinedMCPTool]:
     # Get absolute path to the server
     current_dir = os.path.dirname(os.path.abspath(__file__))
     server_path = os.path.join(os.path.dirname(current_dir), "mcp_servers", "sentence_transformers", "server.py")
-    server_command = ["python", server_path]
+    server_command = [sys.executable, server_path]
     
     return [
         # Removed generate_embedding - it wastes tokens with 384-dimensional arrays
