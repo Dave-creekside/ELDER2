@@ -1,0 +1,27 @@
+{
+	"/": [
+		"src/routes/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/fractal": [
+		"src/routes/+layout.ts"
+	],
+	"/galaxy": [
+		"src/routes/+layout.ts"
+	],
+	"/graph": [
+		"src/routes/+layout.ts"
+	],
+	"/health": [
+		"src/routes/+layout.ts"
+	],
+	"/heatmap": [
+		"src/routes/+layout.ts"
+	],
+	"/matrix": [
+		"src/routes/+layout.ts"
+	],
+	"/student": [
+		"src/routes/+layout.ts"
+	]
+}

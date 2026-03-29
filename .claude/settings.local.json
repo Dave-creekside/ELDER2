@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /home/orion/Projects/ELDER2/streamlined_consciousness -type f -name \"*.py\" -exec wc -l {} +)",
+      "Bash(npm install:*)",
+      "Bash(npx svelte-kit:*)",
+      "Bash(npm --version)",
+      "Bash(command -v nvm)",
+      "Read(//home/orion/.nvm/versions/**)",
+      "Read(//usr/local/lib/**)",
+      "Bash(apt list:*)",
+      "Bash(source ~/.nvm/nvm.sh)",
+      "Bash(nvm list:*)",
+      "Bash(source ~/.bashrc)",
+      "Bash(npx svelte-check:*)",
+      "Bash(npm run:*)",
+      "Bash(find /home/orion/Projects/ELDER2/adapters -type f -name *.py -o -type f -name *.md -o -type f -name *.json)",
+      "Bash(find /home/orion/Projects/ELDER2 -name dashboard.py -o -name *dashboard* -type f)",
+      "Bash(grep -E \"\\\\.py$\")",
+      "Bash(nvm use:*)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}

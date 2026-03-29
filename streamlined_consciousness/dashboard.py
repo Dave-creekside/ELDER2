@@ -189,6 +189,21 @@ class ConsciousnessDashboard:
                     await self.sio.emit('error', {'message': str(e)}, room=sid)
 
         @self.sio.event
+        async def switch_student_model(sid, data):
+            """Switch the student base model (HuggingFace repo or local path)"""
+            model_id = data.get('model_id')
+            if model_id and self.consciousness.student_model:
+                try:
+                    logger.info(f"Dashboard requested student model switch to: {model_id}")
+                    await self.sio.emit('model_switch_status', {'status': 'loading', 'model_id': model_id}, room=sid)
+                    await asyncio.to_thread(self.consciousness.student_model.switch_model, model_id)
+                    await self.sio.emit('model_switch_status', {'status': 'loaded', 'model_id': model_id}, room=sid)
+                    await request_student_status(sid)
+                except Exception as e:
+                    logger.error(f"Error switching student model: {e}")
+                    await self.sio.emit('model_switch_status', {'status': 'error', 'model_id': model_id, 'error': str(e)}, room=sid)
+
+        @self.sio.event
         async def connect(sid, environ):
             self.clients.add(sid)
             logger.info(f"Dashboard client {sid} connected")

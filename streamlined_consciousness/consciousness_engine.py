@@ -762,17 +762,13 @@ Use tools extensively to build and evolve your knowledge structure."""
         return metrics
     
     async def dream_with_ca_evolution(self, iterations: int = 3) -> str:
-        """Dream session with NEW semantic CA evolution system"""
+        """Dream session with semantic CA evolution: pre-dream expansion, dream, post-dream pruning"""
         # Phase 1: Preparation (with lock)
         async with self.processing_lock:
             try:
-                await self._ensure_student_loaded()
                 dream_start_time = time.time()
                 pre_metrics = await self._collect_dream_metrics()
-                
-                # CA logic...
-                pre_ca_result = {"success": True}
-                
+
                 # DREAM SESSION
                 logger.info(f"🌙 Entering dream state for {iterations} iterations...")
                 dream_tools = self._select_dream_tools()
@@ -782,35 +778,53 @@ Use tools extensively to build and evolve your knowledge structure."""
                  logger.error(f"❌ Dream prep error: {e}")
                  return f"Error preparing dream: {e}"
 
-        # Phase 2: Execution (NO lock, allows re-entry for tools)
+        # Phase 2a: Pre-dream CA expansion (create low-strength connections)
+        pre_ca_result = None
+        if self.semantic_ca:
+            try:
+                logger.info("🌱 Running pre-dream CA expansion...")
+                pre_ca_result = await self.semantic_ca.apply_semantic_ca_rules(CAPhase.PRE_DREAM)
+                logger.info(f"   Pre-dream CA: {pre_ca_result.connections_created} connections created")
+            except Exception as e:
+                logger.warning(f"Pre-dream CA failed (continuing with dream): {e}")
+
+        # Phase 2b: Dream agent execution (NO lock, allows re-entry for tools)
         try:
             response = await dream_executor.ainvoke(
                 {"input": dream_context, "chat_history": []}
             )
-            
+
             ai_response = response.get("output", str(response)) if isinstance(response, dict) else str(response)
-            
+
             # Sanitize dream response (handles list content blocks, thinking tags, etc.)
             ai_response = self._sanitize_model_response(ai_response)
 
         except Exception as e:
             logger.error(f"❌ Dream session failed: {e}")
             return f"Dream session encountered an error: {str(e)}"
-                
-        # Phase 3: Post-processing (no lock needed for trace capture usually, but let's be safe)
-        if self.tracer:
+
+        # Phase 3: Post-dream CA pruning (prune weak connections on wake)
+        post_ca_result = None
+        if self.semantic_ca:
             try:
-                await self.tracer.capture_trace(
-                    input_text=dream_context,
-                    output_text=ai_response,
-                    anchor_node="Dream Session",
-                    state="rem"
-                )
+                logger.info("🔄 Running post-dream CA consolidation (pruning weak connections)...")
+                post_ca_result = await self.semantic_ca.apply_semantic_ca_rules(CAPhase.POST_DREAM)
+                logger.info(f"   Post-dream CA: {post_ca_result.connections_created} created, "
+                           f"{post_ca_result.connections_pruned} pruned")
             except Exception as e:
-                logger.warning(f"Failed to capture dream trace: {e}")
+                logger.warning(f"Post-dream CA failed: {e}")
 
         dream_duration = time.time() - dream_start_time
-        return ai_response + f"\n\n🌙 Dream session complete. Duration: {dream_duration:.1f}s"
+
+        # Build summary
+        ca_summary = ""
+        if pre_ca_result:
+            ca_summary += f" | Pre-dream: +{pre_ca_result.connections_created} connections"
+        if post_ca_result:
+            net = post_ca_result.connections_created - post_ca_result.connections_pruned
+            ca_summary += f" | Post-dream: {net:+d} net connections"
+
+        return ai_response + f"\n\n🌙 Dream session complete. Duration: {dream_duration:.1f}s{ca_summary}"
     
     async def dream(self, iterations: int = 3) -> str:
         return await self.dream_with_ca_evolution(iterations)

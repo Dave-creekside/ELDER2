@@ -33,7 +33,7 @@ class StudentModel:
         """Get the adapter path for a specific project"""
         # Sanitize model ID for path usage (replace / with _)
         model_slug = self.model_id.replace("/", "_")
-        return os.path.join(config.ADAPTERS_ROOT_DIR, project_id, model_slug)
+        return os.path.join(config.ADAPTERS_ROOT_DIR, model_slug)
 
     def switch_project(self, project_id: str):
         """Switch the active adapter to a different project"""
@@ -84,6 +84,37 @@ class StudentModel:
                 # Try to recover by reloading full model
                 self.load()
 
+    def switch_model(self, new_model_id: str):
+        """Switch to a different base model, reloading everything"""
+        if new_model_id == self.model_id:
+            return
+
+        logger.info(f"Switching base model from {self.model_id} to {new_model_id}")
+
+        # Save current adapter before switching
+        if self.model:
+            self.save_adapter()
+
+        # Clean up old model from GPU
+        if self.model:
+            del self.model
+            self.model = None
+        if self.tokenizer:
+            del self.tokenizer
+            self.tokenizer = None
+
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
+
+        # Update model ID and adapter path
+        self.model_id = new_model_id
+        self.adapter_path = self.get_adapter_path(self.project_id)
+        os.makedirs(os.path.dirname(self.adapter_path), exist_ok=True)
+
+        # Reload with new model
+        self.load()
+        logger.info(f"Switched to model: {new_model_id}")
+
     def load(self):
         """Load the model and adapter in 4-bit quantization"""
         logger.info(f"Loading Student Model: {self.model_id} on {self.device}")
@@ -128,13 +159,15 @@ class StudentModel:
                 logger.info("Initializing new LoRA adapter")
                 peft_config = LoraConfig(
                     task_type=TaskType.CAUSAL_LM,
-                    inference_mode=False, 
+                    inference_mode=False,
                     r=config.LORA_RANK,
                     lora_alpha=config.LORA_ALPHA,
                     lora_dropout=0.05,
                     target_modules=config.LORA_TARGET_MODULES
                 )
                 self.model = get_peft_model(self.model, peft_config)
+                self.save_adapter()
+                logger.info(f"Initial adapter saved to {self.adapter_path}")
             
             # Get trainable parameters info
             trainable_params, all_param = self.model.get_nb_trainable_parameters()

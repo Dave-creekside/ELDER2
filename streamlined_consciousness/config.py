@@ -22,7 +22,7 @@ class Config:
     LMSTUDIO_API_KEY = os.getenv('LMSTUDIO_API_KEY')  # Optional for LM Studio
 
     # Anthropic Configuration
-    ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514')
+    ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6-20250627')
     ANTHROPIC_TEMPERATURE = float(os.getenv('ANTHROPIC_TEMPERATURE', 0.7))
     ANTHROPIC_MAX_TOKENS = int(os.getenv('ANTHROPIC_MAX_TOKENS', 4000))
     
